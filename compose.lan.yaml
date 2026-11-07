@@ -1,0 +1,13 @@
+# Optional: docker compose -f compose.yaml -f compose.lan.yaml up -d
+# Set LAN IP/subnet and both KIWM_ADMIN_* variables before enabling.
+services:
+  app:
+    environment:
+      KIWM_LAN_URL: http://${KIWM_LAN_IP:?LAN IPv4 required}:${KIWM_LAN_PORT:-8765}
+  ingress:
+    environment:
+      KIWM_LAN_IP: ${KIWM_LAN_IP:?LAN IPv4 required}
+      KIWM_LAN_PORT: ${KIWM_LAN_PORT:-8765}
+      KIWM_LAN_SUBNET: ${KIWM_LAN_SUBNET:?Allowed LAN subnet required}
+    ports:
+      - '${KIWM_LAN_IP:?LAN IPv4 required}:${KIWM_LAN_PORT:-8765}:8083'

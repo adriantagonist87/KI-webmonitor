@@ -1,0 +1,27 @@
+brave.svg
+  Official Brave Browser release-channel logo, unchanged.
+  Copyright Brave Software, Inc. and contributors.
+  Source: https://github.com/brave/leo/blob/74eb76613b9527be96de8943bcea13e6c47014cb/icons/brave-icon-release-color.svg
+  Upstream commit: 74eb76613b9527be96de8943bcea13e6c47014cb
+  SHA-256: 6c27286976e9add450e7d8a229e0a466aa9179c277723cfc5e03d561049c29b9
+  Source license: Mozilla Public License 2.0; see brave-LICENSE.txt.
+  Trademark and logo rights remain with Brave Software, Inc.
+  Used only to identify the installed Brave Browser, without modification.
+  Official brand resources: https://brave.com/brave-branding-assets/
+
+app-logo.png
+  Transparent cutout derived from the user-supplied logo, 2026-11-06.
+  Exterior white background removed using image generation/editing; white eye retained.
+  Original input SHA-256: ee4b688aa01ae6bdea8712fd7f933338d4f51287617df79b3c646dd40b4fa442
+  Current PNG SHA-256: 4eb80d0b5aeb4f6fd6aa86f8e3e3cf9c927c771893533729b287922e5cb0b5e9
+
+favicon.ico
+  Size/format derivative of app-logo.png for browser icons.
+  Preserves alpha transparency and aspect ratio with transparent square padding.
+  ICO sizes: 16, 32, 48, 64, 128, 256 px.
+
+
+brave-mono.svg
+  Monochrome rendering derived from brave.svg above. Original path geometry retained.
+  White lion details are transparent cutouts for a single theme-dependent color.
+  Modified by KI-Webmonitor, 2026-11-05; same MPL-2.0 source license and trademark attribution.

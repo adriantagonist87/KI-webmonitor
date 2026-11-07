@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!nginx.conf
+!app.conf.template
+!lan.conf.template
+!start.sh

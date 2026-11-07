@@ -1,0 +1,34 @@
+# Nur administrative Offline-Sicherung/Wiederherstellung; kein laufender Dienst.
+# Erst app und browser stoppen. Siehe docs/OPERATIONS.md.
+services:
+  backup:
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.12}
+    profiles: [tools]
+    user: '1000:1000'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    network_mode: none
+    healthcheck: {disable: true}
+    entrypoint: [python, /app/volume_backup.py, create]
+    volumes:
+      - ${KIWM_DATA:-data}:/source/data:ro
+      - ${KIWM_CONFIG:-config}:/source/config:ro
+      - ${KIWM_SECRETS:-secrets}:/source/secrets:ro
+      - ${KIWM_BROWSER_DATA:-browser-data}:/source/browser:ro
+  restore:
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.12}
+    profiles: [tools]
+    user: '1000:1000'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    network_mode: none
+    healthcheck: {disable: true}
+    tmpfs: ['/tmp:size=1g,uid=1000,gid=1000']
+    entrypoint: [python, /app/volume_backup.py, restore]
+    volumes:
+      - ${KIWM_DATA:-data}:/source/data
+      - ${KIWM_CONFIG:-config}:/source/config
+      - ${KIWM_SECRETS:-secrets}:/source/secrets
+      - ${KIWM_BROWSER_DATA:-browser-data}:/source/browser

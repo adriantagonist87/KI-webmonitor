@@ -1,0 +1,18 @@
+{% from 'macros.html' import icon,tag_chip %}
+{% if page=='distributions' %}
+<div class="bar"><h1>Verteilerlisten</h1><a class="button" href="/distributions/new">{{icon('plus')}}Neuer Verteiler</a></div>
+<div class="distribution-grid">
+{% for d in distributions %}<section class="card distribution-card"><div class="bar"><h2>{{d.alias}}</h2><form method="post" action="/distributions/{{d.id}}/toggle"><input type="hidden" name="csrf" value="{{csrf}}"><button class="secondary small">{{icon('play' if d.enabled else 'pause')}}{{'Aktiv' if d.enabled else 'Pausiert'}}</button></form></div><p>{{d.emails|length}} Empfänger · {{d.project_count}} zugeordnete Projekte</p><details><summary>Empfänger</summary><ul>{% for email in d.emails %}<li>{{email}}</li>{% endfor %}</ul></details><div class="actions"><a class="button secondary" href="/distributions/{{d.id}}/edit">{{icon('edit')}}Bearbeiten</a><form method="post" action="/distributions/{{d.id}}/preview"><input type="hidden" name="csrf" value="{{csrf}}"><button class="neutral" data-loading="Erstellt …">{{icon('eye')}}Vorschau</button></form><a href="/reports?distribution={{d.id}}">Berichtsverlauf</a></div></section>
+{% else %}<p class="muted">Noch keine Verteiler angelegt.</p>{% endfor %}
+</div>
+{% else %}
+<h1>{{'Verteiler bearbeiten' if distribution.id else 'Neuer Verteiler'}}</h1>
+{% if distribution_error %}<div class="error-banner" role="alert">{{distribution_error}}</div>{% endif %}
+<form method="post" action="/distributions/save" class="card distribution-form"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{distribution.id}}">
+<div class="form-grid"><label>Alias<input name="alias" value="{{distribution.alias}}" maxlength="100" required placeholder="Arbeit"></label><label class="check"><input type="checkbox" name="enabled" {% if distribution.enabled %}checked{% endif %}>Wöchentlichen Versand aktivieren</label></div>
+<label>E-Mail-Adressen<textarea name="emails" rows="3" required placeholder="name@beispiel.de">{{distribution.emails if distribution.emails is string else distribution.emails|join('\n')}}</textarea></label><p class="field-help">Eine Adresse pro Zeile. Jede Adresse erhält eine eigene Nachricht.</p>
+<fieldset><legend>Tags / Gruppen</legend><div class="distribution-options">{% for tag in distribution_tags %}<label class="check"><input type="checkbox" name="tag_ids" value="{{tag.id}}" {% if tag.id in distribution.tag_ids %}checked{% endif %}>{{tag_chip(tag)}}</label>{% else %}<span class="muted">Tags zuerst in der Tagverwaltung anlegen.</span>{% endfor %}</div><p class="field-help">Neue Projekte mit diesen Tags werden automatisch aufgenommen.</p></fieldset>
+<fieldset><legend>Einzelne Projekte ergänzen</legend><div class="distribution-options projects">{% for p in distribution_projects %}<label class="check"><input type="checkbox" name="project_ids" value="{{p.id}}" {% if p.id in distribution.project_ids %}checked{% endif %}><span>{{p.name}}</span></label>{% endfor %}</div></fieldset>
+<p class="field-help">Empfängerberichte enthalten relevante Änderungen und unveränderte Quellen. Hinweisfälle bleiben im Adminbericht.</p><div class="form-footer"><button>{{icon('check')}}Speichern</button><a class="button neutral" href="/distributions">Abbrechen</a></div></form>
+{% if distribution.id %}<details class="card"><summary>Verteiler löschen</summary><form method="post" action="/distributions/{{distribution.id}}/delete"><input type="hidden" name="csrf" value="{{csrf}}"><p>Die bisherigen Berichte bleiben im Archiv.</p><label class="check"><input type="checkbox" name="confirm" required>Verteiler löschen</label><button class="danger">{{icon('trash')}}Löschen</button></form></details>{% endif %}
+{% endif %}

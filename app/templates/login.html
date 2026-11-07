@@ -1,0 +1,12 @@
+<!doctype html>
+{% from 'macros.html' import app_favicon %}
+<html lang="de" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>Anmelden · KI-Webmonitor</title>{{app_favicon()}}<link rel="stylesheet" href="/static/ui.css?v=20261107-login"><link rel="stylesheet" href="/static/login.css?v=2"><script src="/static/login.js?v=1" defer></script></head>
+<body class="page-login"><main class="login-shell"><section class="login-card" aria-labelledby="login-title">
+<div class="login-identity"><img class="login-logo" src="/static/app-logo.png" alt="" width="106" height="120"><div class="login-wordmark"><p class="login-brand"><span>KI-</span>Webmonitor</p><p class="login-tagline">Webseiten überwachen · Änderungen erkennen · Automatisch informiert bleiben</p></div></div><h1 id="login-title">Anmelden</h1>
+{% if error %}<div class="login-error" role="alert">{{error}}</div>{% endif %}
+<form method="post" action="/login" data-login-form>
+<input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="next" value="{{next_url}}">
+<label for="username">Benutzername</label><div class="login-input"><span class="login-input-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2Z"/></svg></span><input id="username" name="username" value="{{username|default('')}}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="80" required {% if configured %}autofocus{% else %}disabled{% endif %}></div>
+<label for="password">Passwort</label><div class="login-input login-password"><span class="login-input-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4"/></svg></span><input id="password" name="password" type="password" autocomplete="current-password" maxlength="512" required {% if not configured %}disabled{% endif %}><button class="login-reveal" type="button" data-reveal-password aria-label="Passwort anzeigen" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+<button class="login-submit" type="submit" {% if not configured %}disabled{% endif %}><span>Anmelden</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6"/></svg></button>
+</form></section></main></body></html>

@@ -1,0 +1,61 @@
+Release: 1.5.12
+Gepruefter Stand: 2026-11-07
+1.5.12: VDE-Vornormen in DKE-Archiv, Auswertung und Berichten gekennzeichnet.
+1.5.11: Nationale DKE-Normausgaben mit Monats- und Quartalsabgleich.
+1.5.10: Dashboard mit Fehlern zuerst und Sortierung nach Prüfung, Änderung oder Name.
+1.5.9: Begrenzte Fokuswiederholung und Prüfung des aktiven Eingabefelds bei nativer Anmeldung.
+1.5.8: Verteilerberichte verlinken externe Originalquellen und Übersichtsseiten.
+1.5.7: Explizite Telegram-Quellenlinks und speicherbares Firefox-Lesezeichen-Favicon.
+1.5.6: Überwachung stabiler GitHub-Releases mit knapper Zusammenfassung neuer Funktionen.
+1.5.5: Kompakte Wochenberichtsliste mit klaren Versandstatus und Filter für reguläre Berichte.
+1.5.4: Projekt-Favicons im globalen Dateiverzeichnis.
+1.5.3: Klickbarer Navigationspfad und breiteres Dateiverzeichnis mit kompakter Dateityp- und Downloadspalte.
+1.5.2: Dokumentnamen aus digitalem Text der ersten Seite. Kein OCR.
+Isolierter Erstseitenleser fuer PDF und Office. 181 Tests und Erstseiten-Abnahme mit PDF, Word, Excel und beiden EHB-Fassungen bestanden.
+1.5.1: Halbierte Dateisymbole und sortier-/suchbare Dokumentnamen aus Quellseiten.
+Die lokale KI ordnet nur unklare Downloadbezeichnungen aus dem Webseitentext zu; keine Dokumentinhaltsanalyse.
+224 gezielte Tests bestanden, keine ausgelassen; echter lokaler Modellaufruf und HTTPS-Live-Abnahme bestanden.
+395 vorhandene Dateien benannt; alle 60 BIM-Quellen mit Namen und unveraenderten Originalhashes bestaetigt.
+Alle fuenf Container gesund; bestehende ENV-Werte, Originaldateien und Aenderungsverlauf erhalten.
+Details: docs/DOKUMENTNAMEN-1.5.1.md
+1.5.0: Admin-Verteilerlisten, gefilterte Empfaengerberichte und chronologisches Versandprotokoll.
+222 gezielte Tests bestanden, keine ausgelassen: Auswahltrennung, Versand, Import, Anmeldung und bestehende Berichte.
+Weitere 49 Browsertests bestanden, keine ausgelassen; insgesamt 271 Tests.
+Echter isolierter Mailpit-Versand: getrennte Empfaenger, kein Fremdinhalt, keine Adminhinweise; Neustart ohne Doppelversand.
+Brave-Abnahme: Verteiler anlegen, Vorschau, Ursprungsbericht, Versandhistorie und Berichtsfilter bestanden.
+Portainer-Live: alle fuenf Container gesund, HTTPS-Anmeldung/Archive/Brave bestanden, echte lokale KI-Vorschau mit 14 Projekten erstellt.
+Details: docs/VERTEILER.md
+1.4.1: Farbige Dateityp-Icons und systemunabhaengige Animationssteuerung.
+1.4.0: Kompakter HTML-Wochenbericht, gemeinsame Vorschau und CID-Inlinebilder.
+223 gezielte Tests bestanden, keine ausgelassen; echter Mailpit-Versand und Thunderbird-Sichtpruefung bestanden.
+Details: docs/WOCHENBERICHT-1.4.md
+1.3.6: Externe HTTP-Aufrufe wechseln automatisch zu HTTPS; alte HTTP-Logins starten dort neu.
+Echter nginx-Integrationstest mit HTTP-Einstieg, Anmeldung und Brave/WebSocket bestanden.
+Cloudflare Live: HTTP-Umleitung und alter HTTP-Login-POST sowie anschliessende HTTPS-Anmeldung/Brave bestanden.
+Externer HTTPS-Zugang hinter Cloudflare/Reverse Proxy per KIWM_PUBLIC_URL.
+91 gezielte Anmelde-/LAN-/Oberflaechen-/Importtests bestanden, keine ausgelassen.
+nginx-Integration: Anmeldung, geschuetztes Brave-HTML und authentifizierter WebSocket bestanden.
+Cloudflare Live: HTTPS-Anmeldung, Dashboard, Brave-HTML, WebSocket/RFB und Abmeldung bestanden.
+Details zum externen Zugang: docs/CLOUDFLARE.md
+Optionaler visueller Browsermodus mit echter Maus-/Tastatureingabe.
+257 gezielte Anwendungstests bestanden, keine ausgelassen.
+Vorversion 1.3.4: 47 gezielte Browser-/Sammlungs-/Agententests bestanden, keine ausgelassen.
+Lokales Visionmodell: 3/3 sichtbare Navigationsziele korrekt ausgewaehlt und geklickt.
+Standardmodus bleibt Vorgabe; projektweise Aktivierung und Rueckwechsel moeglich.
+VDE Live erfolgreich am 2026-11-07 14:39 Europe/Berlin: 17 Normen-Eintraege 2026, Jahresgrenze, Bericht.
+Sitzung nach Browserneustart wiederverwendet; kein erkannter Bot-Schutz.
+Nur VDE im visuellen Modus; 13 andere Projektdefinitionen unveraendert.
+Details: docs/PRUEFUNG-VISUELL-2026-11-07.md
+
+Linux-LXC: Ubuntu 24.04.2 LTS, x86_64
+Docker Engine: 28.3.1
+Docker Compose: v2.38.1
+Git in der LXC: 2.43.0
+Python im App-Image: 3.12.16
+browser-use: 0.13.14 (installierte Abhaengigkeit, kein aktiver Steuerungspfad)
+Playwright: 1.58.0
+FastAPI: 0.162.0
+Uvicorn: 0.54.0
+Brave Browser: 157.1.99.55
+Optionales Mailpit: axllent/mailpit:v1.33.0
+Ingress-Basis: nginxinc/nginx-unprivileged:1.28-alpine

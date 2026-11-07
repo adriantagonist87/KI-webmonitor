@@ -1,0 +1,33 @@
+{% macro icon(name, extra='') -%}<svg class="icon {{extra}}" aria-hidden="true"><use href="#i-{{name}}"></use></svg>{%- endmacro %}
+{% macro app_favicon() -%}<link rel="icon" type="image/vnd.microsoft.icon" sizes="16x16 32x32 48x48 64x64 128x128 256x256" href="/favicon.ico">{%- endmacro %}
+{% macro project_favicon(src) -%}
+{% if src %}<img class="project-favicon" src="{{src}}" alt="" loading="lazy">{% else %}<span class="favicon-placeholder" aria-hidden="true">{{icon('globe')}}</span>{% endif %}
+{%- endmacro %}
+{% macro badge(status) -%}<span class="badge {{status or ''}}"><span class="status-dot"></span>{{status|status_label}}</span>{%- endmacro %}
+{% macro controls() %}<button type="button" class="control js-only" data-motion-toggle aria-pressed="true" aria-label="Animationen ausschalten">{{icon('motion')}}<span>Animationen an</span></button><button type="button" class="control icononly js-only" data-theme-toggle aria-label="Dunkle Darstellung einschalten" aria-pressed="false">{{icon('moon')}}</button><label class="density js-only"><span aria-hidden="true">Aa</span><span class="sr-only">Schriftgröße</span><select data-ui-size aria-label="Schriftgröße">{% for size in range(50,151,10) %}<option value="{{size}}" {% if size==100 %}selected{% endif %}>{{size}} %</option>{% endfor %}</select></label>{% endmacro %}
+{% macro heading(title, section='', description='', name='folder') %}<div class="page-heading"><h1>{{title}}</h1>{{caller() if caller is defined else ''}}</div>{% endmacro %}
+
+{% macro tag_chip(tag, extra='') -%}<span class="tag color-tag {{extra}}" style="--tag-color:{{tag.color|default('#64748b')}}">{{tag.name|default(tag.label)}}</span>{%- endmacro %}
+
+{% macro change_findings(findings, title, section_id) %}
+{% if findings %}<section class="card" id="{{section_id}}" data-relevant-findings><h2>{{title}} <span class="count">{{findings|length}}</span></h2><ul class="report">
+{% for finding in findings %}<li data-finding-id="{{finding.id}}"><p>{{finding.reason}}</p><p class="source">{% if finding.href %}<a href="{{finding.href}}" target="_blank" rel="noreferrer noopener">Quelle</a>{% else %}{{finding.url}}{% endif %} · <time datetime="{{finding.time}}">{{finding.time|localtime}}</time> · <a href="/runs/{{finding.run_id}}">Prüfung öffnen</a></p></li>{% endfor %}
+</ul>{{caller() if caller is defined else ''}}</section>{% endif %}
+{% endmacro %}
+
+{% macro schedule_fields(value, prefix='schedule') %}
+{% set mode=value.get('mode','daily') %}
+<div class="schedule-editor" data-schedule-editor>
+ <div class="form-grid schedule-grid">
+  <div class="field-group"><label for="{{prefix}}-mode">Wiederholung</label><select id="{{prefix}}-mode" name="schedule_mode" data-schedule-mode>
+   {% for key,label in [('daily','Täglich'),('weekdays','Werktags · Montag bis Freitag'),('weekly','Wöchentlich'),('monthly','Monatlich'),('interval','Alle … Stunden')] %}<option value="{{key}}" {% if mode==key %}selected{% endif %}>{{label}}</option>{% endfor %}
+   {% if mode=='custom' %}<option value="custom" selected>Bisheriger Zeitplan beibehalten</option>{% endif %}
+  </select></div>
+  <div class="field-group" data-schedule-when="daily weekdays weekly monthly"><label for="{{prefix}}-time">Uhrzeit · Europe/Berlin</label><input id="{{prefix}}-time" name="schedule_time" type="time" value="{{value.get('time','06:00')}}" required></div>
+  <div class="field-group" data-schedule-when="weekly"><label for="{{prefix}}-weekday">Wochentag</label><select id="{{prefix}}-weekday" name="schedule_weekday">{% for label in ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'] %}<option value="{{loop.index0}}" {% if value.get('weekday',0)|int==loop.index0 %}selected{% endif %}>{{label}}</option>{% endfor %}</select></div>
+  <div class="field-group" data-schedule-when="monthly"><label for="{{prefix}}-monthday">Tag im Monat</label><select id="{{prefix}}-monthday" name="schedule_monthday">{% for day in range(1,32) %}<option value="{{day}}" {% if value.get('monthday',1)|int==day %}selected{% endif %}>{{day}}.</option>{% endfor %}</select><p class="field-help">In kürzeren Monaten am letzten Tag.</p></div>
+  <div class="field-group" data-schedule-when="interval"><label for="{{prefix}}-interval">Abstand in Stunden</label><select id="{{prefix}}-interval" name="schedule_interval">{% for hours in range(1,169) %}<option value="{{hours}}" {% if value.get('interval',6)|int==hours %}selected{% endif %}>{{hours}} Stunde{{'n' if hours!=1 else ''}}</option>{% endfor %}</select></div>
+  {% if mode=='custom' %}<p class="field-help" data-schedule-when="custom">Der bisherige Zeitplan bleibt gespeichert. Wählen Sie eine Wiederholung, um ihn zu ersetzen.</p>{% endif %}
+ </div>
+</div>
+{% endmacro %}

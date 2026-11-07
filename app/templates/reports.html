@@ -1,0 +1,52 @@
+{% from 'macros.html' import icon %}
+{% macro mail_badge(r) %}
+{% set status=r.mail_status %}
+{% set label=mail_labels.get(status,status) %}
+{% if status=='preview' %}{% set label='Nur Vorschau' %}
+{% elif status=='sent' and r.period_key.startswith('test-') %}{% set label='Testmail versandt' %}{% endif %}
+<span class="badge {{'success' if status=='sent' else 'failed' if status in ['failed','unknown'] else 'queued' if status in ['preview','pending','sending'] else ''}}"{% if r.sent_at %} title="Versandt am {{r.sent_at|audit_time}}"{% endif %}>{{label}}</span>
+{% endmacro %}
+{% if page=='reports' %}
+<div class="bar"><h1>Wochenberichte</h1><form method="post" action="/reports/test"><input type="hidden" name="csrf" value="{{csrf}}"><button data-loading="Erstellt …">{{icon('eye')}}Vorschau erstellen</button></form></div>
+<form method="get" action="/reports" class="report-filters">
+<label>Berichtstyp<select name="scope"><option value="all">Alle Berichte</option><option value="admin" {% if report_scope=='admin' %}selected{% endif %}>Globaler Adminbericht</option><option value="distribution" {% if report_scope=='distribution' %}selected{% endif %}>Verteilerberichte</option></select></label>
+<label>Verteiler<select name="distribution"><option value="">Alle Verteiler</option>{% for d in report_distributions %}<option value="{{d.id}}" {% if report_distribution==d.id %}selected{% endif %}>{{d.alias}}{{' (gelöscht)' if d.deleted_at else ''}}</option>{% endfor %}</select></label>
+<label class="check report-regular-filter"><input type="checkbox" name="regular" value="1" {% if report_regular_only %}checked{% endif %}>Nur reguläre Berichte</label>
+<button class="secondary" type="submit">Filtern</button>
+</form>
+<p class="muted">Montags, 08:00 Uhr · Europe/Berlin</p>
+{% if reports %}
+<div class="card tablewrap report-table-wrap" role="region" aria-label="Archivierte Wochenberichte" tabindex="0">
+<table class="report-table">
+<thead><tr><th scope="col" class="report-col-name">Bericht</th><th scope="col" class="report-col-status">Versand</th><th scope="col" class="report-col-period">Berichtszeitraum</th><th scope="col" title="Europe/Berlin">Erstellt</th></tr></thead>
+<tbody>
+{% for r in reports %}
+{% set start_date=r.start|localtime('%d.%m.%Y') %}{% set end_date=r.end|localtime('%d.%m.%Y') %}
+<tr>
+<td><a class="report-name" href="/reports/{{r.id}}">{{(r.distribution_alias or 'Verteilerbericht') if r.audience=='distribution' else 'Globaler Adminbericht'}}</a>{% if r.audience=='distribution' and r.recipient_email %}<span class="report-recipient">{{r.recipient_email}}</span>{% endif %}</td>
+<td>{{mail_badge(r)}}</td>
+<td class="report-date report-period" title="{{r.start|localtime}} bis {{r.end|localtime}}"><time datetime="{{r.start}}">{{start_date}}</time>{% if start_date!=end_date %} – <time datetime="{{r.end}}">{{end_date}}</time>{% endif %}</td>
+<td class="report-date"><time datetime="{{r.created}}" title="{{r.created|audit_time}}">{{r.created|localtime}}</time></td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% else %}
+<p class="card muted">{{'Keine Berichte für diese Auswahl.' if report_regular_only or report_scope!='all' or report_distribution else 'Noch keine Wochenberichte vorhanden.'}}</p>
+{% endif %}
+{% if report_pages>1 %}
+{% set report_query='scope=' ~ report_scope|urlencode ~ '&distribution=' ~ report_distribution|urlencode ~ ('&regular=1' if report_regular_only else '') %}
+<nav class="actions" aria-label="Berichtsseiten">{% if report_page>1 %}<a class="button neutral" href="/reports?{{report_query}}&amp;page={{report_page-1}}">{{icon('back')}}Zurück</a>{% endif %}<span>{{report_page}} / {{report_pages}}</span>{% if report_page<report_pages %}<a class="button neutral" href="/reports?{{report_query}}&amp;page={{report_page+1}}">Weiter</a>{% endif %}</nav>
+{% endif %}
+{% else %}
+<div class="bar"><h1>{{'Wochenbericht · '+report.distribution_alias if report.audience=='distribution' else 'Globaler Wochenbericht'}}</h1><a class="button secondary" href="/reports/{{report.id}}/message.eml">{{icon('download')}}EML herunterladen</a></div>
+<div class="report-info"><span>{{mail_badge(report)}}</span>{% if report.audience=='distribution' %}<span>Empfänger: {{report.recipient_email}}</span><a href="/reports/{{report.parent_id}}">Globalen Adminbericht öffnen</a>{% endif %}<span>Erstellt: {{report.created|audit_time}}</span>{% if report.sent_at %}<span>Versandt: {{report.sent_at|audit_time}}</span>{% endif %}{% if report.mail_status=='failed' and report.next_attempt %}<span>Nächster Versuch: {{report.next_attempt|audit_time}}</span>{% endif %}</div>
+{% if report.error %}<div class="error-banner" role="status">{{report.error}}</div>{% endif %}
+{% if report.mail_status in ['failed','unknown'] %}<form method="post" action="/reports/{{report.id}}/retry" class="card"><input type="hidden" name="csrf" value="{{csrf}}">{% if report.mail_status=='unknown' %}<label class="check"><input type="checkbox" name="confirm_duplicate" required>Ich habe die Zustellung geprüft. Erneuter Versand kann eine doppelte E-Mail erzeugen.</label>{% endif %}<button class="secondary">{{icon('refresh')}}Versand erneut vormerken</button></form>{% endif %}
+<iframe class="email-preview" title="Wochenbericht – E-Mail-Vorschau" src="/reports/{{report.id}}/html" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe><script src="/static/report-preview.js" defer></script>
+{% if child_reports %}<details class="card" open><summary>Verteilerberichte ({{child_reports|length}})</summary><div class="tablewrap"><table><tr><th>Verteiler</th><th>Empfänger</th><th>Versand</th></tr>{% for r in child_reports %}<tr><td><a href="/reports/{{r.id}}">{{r.distribution_alias}}</a></td><td>{{r.recipient_email}}</td><td>{{mail_badge(r)}}</td></tr>{% endfor %}</table></div></details>{% endif %}
+<details class="card" open><summary>Versandprotokoll</summary><div class="tablewrap"><table><tr><th>Zeit · Europe/Berlin</th><th>Status</th><th>Eintrag</th></tr>{% for e in mail_events %}<tr><td>{{e.created|audit_time}}</td><td>{{mail_labels.get(e.status,e.status)}}</td><td>{{e.note}}</td></tr>{% else %}<tr><td colspan="3">Für ältere Berichte wurde noch kein Versandprotokoll aufgezeichnet.</td></tr>{% endfor %}</table></div></details>
+{% if report.audience=='distribution' %}<details class="card"><summary>Gespeicherte Auswahl</summary><p>{{selection_info.included_project_ids|length}} Quellen im Empfängerbericht · {{selection_info.withheld_project_ids|length}} Hinweisfälle nur im Adminbericht</p>{% for t in selection_info.selected_tags %}<span class="tag">{{t}}</span>{% endfor %}{% for p in selection_info.selected_projects %}<div>{{p}}</div>{% endfor %}</details>{% endif %}
+<details class="card"><summary>Klartext</summary><pre>{{report.content}}</pre></details>
+{% endif %}

@@ -1,0 +1,13 @@
+# Nur zur Entwicklung bzw. zum lokalen Erstellen der Release-Images.
+# docker compose -f compose.yaml -f compose.build.yaml build
+services:
+  app:
+    build: {context: ., dockerfile: app/Dockerfile}
+  page-reader:
+    build: {context: ., dockerfile: app/page-reader.Dockerfile}
+  browser:
+    build: {context: browser}
+  proxy:
+    build: {context: proxy}
+  ingress:
+    build: {context: ingress}

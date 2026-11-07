@@ -1,0 +1,7 @@
+# Diese Datei ist eine Vorlage, kein verwendbarer SSH-Vertrauensanker.
+# Die echte Datei scripts/known_hosts bleibt lokal und wird nicht versioniert.
+# Den SSH-Hostschluessel der LXC ueber einen bereits vertrauenswuerdigen Zugang
+# beschaffen und den Fingerabdruck separat pruefen. Danach die bestaetigte
+# known_hosts-Zeile hier einsetzen und als scripts/known_hosts speichern.
+# ssh-keyscan allein bestaetigt die Identitaet des Servers nicht.
+# Format einer Zeile: HOSTNAME_ODER_IP SCHLUESSELTYP OEFFENTLICHER_SCHLUESSEL

@@ -1,0 +1,5 @@
+Drawbotics/file-icons
+https://github.com/Drawbotics/file-icons
+Commit: 1bf12626ca659666277c1748621d355cda7354ad
+License: MIT, see LICENSE.
+style.css is unchanged upstream CSS. App-specific sizes and additional file colors are in ui.css.

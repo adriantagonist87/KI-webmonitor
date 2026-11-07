@@ -1,0 +1,21 @@
+# App image build context is an allowlist. Persistent data and secrets must never
+# enter an image layer, build cache or an uploaded build context.
+**
+!app/
+!app/**
+!scripts/
+!scripts/backup_archive.py
+!scripts/run-checks.py
+app/**/__pycache__/
+app/**/*.pyc
+app/**/*.pyo
+app/**/.env
+app/**/.env.*
+app/**/.git/
+app/**/secrets/
+app/**/data/
+app/**/*.db
+app/**/*.db-*
+app/**/*.sqlite*
+app/**/*.key
+app/**/*.pem

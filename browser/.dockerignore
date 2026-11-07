@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!policies.json
+!start.sh
+!close-browser.py
+!healthcheck.py

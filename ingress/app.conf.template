@@ -1,0 +1,55 @@
+map $http_origin $browser_origin_allowed {
+  default 0;
+  "" 1;
+  "http://localhost:__BROWSER_PORT__" 1;
+  "http://127.0.0.1:__BROWSER_PORT__" 1;
+}
+server {
+  listen 8080;
+  set $kiwm_app http://app:8000;
+  server_name localhost;
+  client_max_body_size 1m;
+  # Downloads stream directly; never spill ZIPs/exports into the bounded /tmp.
+  proxy_buffering off;
+  proxy_max_temp_file_size 0;
+  location = /transfer/preview {
+    client_max_body_size 513m;
+    proxy_request_buffering off;
+    proxy_http_version 1.1;
+    proxy_pass $kiwm_app;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-KIWM-Client-IP $remote_addr;
+    proxy_read_timeout 900s;
+  }
+  location / {
+    proxy_pass $kiwm_app;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-KIWM-Client-IP $remote_addr;
+    proxy_read_timeout 900s;
+  }
+}
+server {
+  listen 8081;
+  set $kiwm_browser http://browser:6080;
+  server_name localhost;
+  if ($browser_origin_allowed = 0) { return 403; }
+  set $kiwm_app http://app:8000;
+  location = /_kiwm_session {
+    internal;
+    proxy_pass $kiwm_app/auth/check;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+    proxy_set_header Host localhost;
+    proxy_set_header Authorization "";
+  }
+  location @kiwm_login { return 303 http://localhost:__WEB_PORT__/login?next=/browser; }
+  location / {
+    auth_request /_kiwm_session;
+    error_page 401 = @kiwm_login;
+    proxy_pass $kiwm_browser;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 3600s;
+  }
+}

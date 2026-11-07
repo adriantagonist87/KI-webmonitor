@@ -1,0 +1,159 @@
+# KI-Webmonitor 1.2 · Docker Compose und Portainer Standalone
+# Persönliche Einstellungen: .env.example. Weitere Optionen: advanced.env.example.
+# Daten-Volumes entstehen automatisch. Alle Oberflächen bleiben lokal geschützt.
+name: ki-webmonitor
+
+# Gemeinsame Sicherheits- und Betriebsvorgaben für alle sechs Dienste.
+x-betrieb: &betrieb
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging:
+    driver: json-file
+    options: {max-size: 5m, max-file: '3'}
+
+# Leer lassen, um die Einstellungen aus der Weboberfläche zu verwenden.
+x-ki: &ki
+  KIWM_OMLX_URL: ${KIWM_OMLX_URL:-}
+  KIWM_OMLX_API_KEY: ${KIWM_OMLX_API_KEY:-}
+  KIWM_MODEL: ${KIWM_MODEL:-}
+  KIWM_AGENT_MODEL: ${KIWM_AGENT_MODEL:-}
+  KIWM_ANALYSIS_MODEL: ${KIWM_ANALYSIS_MODEL:-}
+  KIWM_VISION_MODEL: ${KIWM_VISION_MODEL:-}
+
+# Versand: leere Werte verwenden die Webeinstellungen.
+x-versand: &versand
+  KIWM_TELEGRAM_BOT_TOKEN: ${KIWM_TELEGRAM_BOT_TOKEN:-}
+  KIWM_TELEGRAM_CHAT_ID: ${KIWM_TELEGRAM_CHAT_ID:-}
+  KIWM_TELEGRAM_MODE: ${KIWM_TELEGRAM_MODE:-}
+  KIWM_SMTP_ENABLED: ${KIWM_SMTP_ENABLED:-}
+  KIWM_SMTP_HOST: ${KIWM_SMTP_HOST:-}
+  KIWM_SMTP_PORT: ${KIWM_SMTP_PORT:-}
+  KIWM_SMTP_TLS: ${KIWM_SMTP_TLS:-}
+  KIWM_SMTP_USER: ${KIWM_SMTP_USER:-}
+  KIWM_SMTP_PASSWORD: ${KIWM_SMTP_PASSWORD:-}
+  KIWM_SMTP_FROM: ${KIWM_SMTP_FROM:-}
+  KIWM_SMTP_TO: ${KIWM_SMTP_TO:-}
+
+services:
+  # 1. Anwendung · Projekte, Zeitpläne, Berichte und Dateivergleich
+  app:
+    <<: *betrieb
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.12}
+    user: '1000:1000'
+    init: true
+    stop_grace_period: 60s
+    mem_limit: 2500m
+    tmpfs: ['/tmp:size=512m,uid=1000,gid=1000,mode=1770']
+    environment:
+      <<: [*ki, *versand]
+      ROLE: app
+      KIWM_PUBLIC_URL: ${KIWM_PUBLIC_URL:-}
+      KIWM_ADMIN_USERNAME: ${KIWM_ADMIN_USERNAME:-}
+      KIWM_ADMIN_PASSWORD: ${KIWM_ADMIN_PASSWORD:-}
+      KIWM_SESSION_HOURS: ${KIWM_SESSION_HOURS:-168}
+      TZ: Europe/Berlin
+      BROWSER_CDP_URL: http://browser:9223
+      BROWSER_UI_URL: http://localhost:${BROWSER_PORT:-8766}
+    volumes:
+      - ${KIWM_DATA:-data}:/data
+      - ${KIWM_CONFIG:-config}:/config
+      - ${KIWM_SECRETS:-secrets}:/secrets
+      - page-reader-socket:/run/kiwm-page-reader:ro
+    networks: [monitor]
+    depends_on:
+      browser: {condition: service_healthy}
+      gateway: {condition: service_healthy}
+
+  # Digitaler Text von Seite eins. Nur Unix-Socket, keine Archiv- oder Secret-Mounts.
+  page-reader:
+    <<: *betrieb
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-page-reader:${VERSION:-1.5.12}
+    user: '1000:1000'
+    init: true
+    network_mode: none
+    mem_limit: 768m
+    pids_limit: 96
+    tmpfs: ['/tmp:size=192m,uid=1000,gid=1000,mode=1770']
+    volumes:
+      - page-reader-socket:/run/kiwm-page-reader
+
+  # 2. Brave · grafischer Browser mit dauerhaftem Profil
+  browser:
+    <<: *betrieb
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-browser:${VERSION:-1.5.12}
+    user: '1000:1000'
+    init: true
+    stop_grace_period: 30s
+    mem_limit: 3g
+    shm_size: 1gb
+    tmpfs: ['/tmp:size=512m,uid=1000,gid=1000,mode=1777', '/run:size=16m,uid=1000,gid=1000']
+    volumes:
+      - ${KIWM_BROWSER_DATA:-browser-data}:/data
+    networks: [monitor]
+    depends_on:
+      proxy: {condition: service_healthy}
+
+  # 3. Internetfilter · sperrt private Netzadressen für den Browser
+  proxy:
+    <<: *betrieb
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-proxy:${VERSION:-1.5.12}
+    user: proxy
+    init: true
+    mem_limit: 256m
+    tmpfs: ['/tmp:size=64m,mode=1777']
+    networks: [monitor, outbound]
+
+  # 4. Verbindung zum lokalen KI-Server und zum konfigurierten SMTP-Server
+  gateway:
+    <<: *betrieb
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.12}
+    user: '1000:1000'
+    init: true
+    mem_limit: 384m
+    tmpfs: ['/tmp:size=32m,uid=1000,gid=1000']
+    environment:
+      <<: [*ki, *versand]
+      ROLE: gateway
+      MONITOR_SUBNET: ${MONITOR_SUBNET:-172.29.133.0/24}
+    volumes:
+      - ${KIWM_CONFIG:-config}:/config:ro
+      - ${KIWM_SECRETS:-secrets}:/secrets:ro
+    networks: [monitor, outbound]
+
+  # 5. Geschützter Zugang · Anwendung 8765, Brave 8766 (per SSH-Tunnel)
+  ingress:
+    <<: *betrieb
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-ingress:${VERSION:-1.5.12}
+    user: '101:101'
+    mem_limit: 128m
+    tmpfs: ['/tmp:size=32m,uid=101,gid=101']
+    environment:
+      BROWSER_PORT: ${BROWSER_PORT:-8766}
+      KIWM_PUBLIC_URL: ${KIWM_PUBLIC_URL:-}
+      WEB_PORT: ${WEB_PORT:-8765}
+    ports:
+      - '127.0.0.1:${WEB_PORT:-8765}:8080'
+      - '127.0.0.1:${BROWSER_PORT:-8766}:8081'
+    networks: [monitor, outbound]
+    depends_on:
+      app: {condition: service_healthy}
+      browser: {condition: service_healthy}
+
+# Dauerhafte Daten; werden bei Updates und normalem Entfernen des Stacks erhalten.
+volumes:
+  data:
+  config:
+  secrets:
+  browser-data:
+  page-reader-socket:
+
+# Der Browser und die Anwendung besitzen keinen direkten LAN-/Internetzugang.
+networks:
+  monitor:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${MONITOR_SUBNET:-172.29.133.0/24}
+  outbound: {}

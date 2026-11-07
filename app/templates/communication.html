@@ -1,0 +1,38 @@
+{% macro field(name,label,type='text',default='') %}
+{% set source=config_sources.get(name,{}) %}
+<div class="field-group"><label for="{{name}}">{{label}}</label><input id="{{name}}" name="{{name}}" type="{{type}}" value="{{settings.get(name,default)}}" data-config-source="{{source.source|default('ui')}}" {% if source.readonly %}readonly aria-readonly="true"{% endif %}{% if type=='number' %} min="1" max="65535"{% endif %}>
+{% if source.readonly %}<p class="field-help">Portainer / ENV · <code>{{source.environment}}</code></p>{% endif %}</div>
+{% endmacro %}
+<div class="page-heading"><h1>{{'Telegram' if page=='telegram' else 'SMTP-Mailserver'}}</h1></div>
+{% for field,error in settings.get('_communication_errors',{}).items() %}{% if field.startswith(page+'_') %}<div class="warning" role="alert">{{error}} · Portainer-Vorgabe prüfen.</div>{% endif %}{% endfor %}
+<section class="card">
+<form method="post" action="{{'/telegram/save' if page=='telegram' else '/settings/smtp'}}" data-guard-unsaved>
+<input type="hidden" name="csrf" value="{{csrf}}">
+{% if page=='telegram' %}
+<div class="form-grid">{{field('telegram_chat_id','Chat-ID (Empfänger)')}}
+{% set private='telegram_token' %}
+{% else %}
+<div class="form-grid">{{field('smtp_host','SMTP-Server')}}{{field('smtp_port','Port','number',587)}}
+<div class="field-group"><label for="smtp_tls">Verschlüsselung</label><select id="smtp_tls" name="smtp_tls" {% if config_sources.smtp_tls.readonly %}disabled{% endif %}>{% for value,label in [('starttls','STARTTLS'),('ssl','TLS / SSL')] %}<option value="{{value}}" {% if settings.get('smtp_tls','starttls')==value %}selected{% endif %}>{{label}}</option>{% endfor %}</select>{% if config_sources.smtp_tls.readonly %}<p class="field-help">Portainer / ENV · {{config_sources.smtp_tls.environment}}</p>{% endif %}</div>
+{{field('smtp_user','Benutzername')}}{{field('smtp_from','Absenderadresse','email')}}{{field('smtp_to','Empfängeradresse','email')}}
+{% set private='smtp_password' %}
+{% endif %}
+{% set source=config_sources.get(private,{}) %}
+<div class="field-group"><label for="{{private}}">{{'Bot-Token' if page=='telegram' else 'Passwort'}}</label><input id="{{private}}" name="{{private}}" type="password" autocomplete="new-password" data-config-source="{{source.source|default('ui')}}" {% if source.readonly %}readonly aria-readonly="true"{% endif %} placeholder="{{'Über Portainer / ENV gesetzt' if source.readonly else 'Leer lassen: gespeicherten Wert behalten'}}">{% if source.readonly %}<p class="field-help">Portainer / ENV · <code>{{source.environment}}</code></p>{% endif %}</div></div>
+<label class="check-label"><input type="checkbox" name="clear_secret" {% if source.readonly %}disabled{% endif %}>Gespeicherten {{'Bot-Token' if page=='telegram' else 'Passwortwert'}} entfernen</label>
+{% if page=='telegram' %}
+<p class="field-help">Bot mit @BotFather erstellen, den Bot in Telegram öffnen und „Starten“ drücken. Als Ziel die eigene Chat-ID, Gruppen-ID oder den @Kanalnamen eintragen. Die Bot-ID allein ist keine Empfängeradresse. Tokens gehören ausschließlich in dieses Feld oder in Portainer.</p>
+{% include 'telegram_mode.html' %}
+{% else %}
+<label class="check-label"><input type="checkbox" name="smtp_enabled" {% if settings.get('smtp_enabled') %}checked{% endif %} {% if config_sources.smtp_enabled.readonly %}disabled{% endif %}>Wochenberichte per E-Mail versenden</label>
+{% if config_sources.smtp_enabled.readonly %}<p class="field-help">Portainer / ENV · <code>{{config_sources.smtp_enabled.environment}}</code></p>{% endif %}
+<p class="field-help">Montags um 08:00 Uhr · Europe/Berlin. Ohne aktivierten Versand bleiben die Berichte als Vorschau gespeichert.</p>
+{% endif %}
+<div class="form-footer"><button data-loading="Speichert …">{{icon('check')}}<span data-button-label>Speichern</span></button></div>
+</form></section>
+<section class="card"><h2>Verbindung prüfen</h2><p class="field-help">Änderungen zuerst speichern. Tests verwenden die gespeicherten Werte oder die Portainer-Vorgaben. Eine Testnachricht wird auch bei ausgeschaltetem automatischem Versand an den eingestellten Empfänger gesendet.</p>
+<form method="post" action="/{{page}}/test"><input type="hidden" name="csrf" value="{{csrf}}"><div class="form-footer"><button class="neutral" name="action" value="connection" data-loading="Prüft …">{{icon('refresh')}}<span data-button-label>Verbindung testen</span></button><button name="action" value="message" data-loading="Sendet …">{{icon('telegram' if page=='telegram' else 'mail')}}<span data-button-label>{{'Testnachricht senden' if page=='telegram' else 'Testmail senden'}}</span></button></div></form>
+{% if test_result %}<div class="{{'info-banner' if test_result.ok else 'warning'}}" role="status"><div><strong>{{test_result.message}}</strong><p class="field-help">{{test_result.time|localtime}} · {{'Versandtest' if test_result.action=='message' else 'Verbindungstest'}}</p></div></div>{% endif %}
+</section>
+{% if page=='smtp' and test_tools %}<p><a class="button neutral" href="{{mailpit_ui_url}}" target="_blank" rel="noreferrer">{{icon('external')}}Testpostfach öffnen</a></p>{% endif %}
+{% if page=='telegram' %}<details class="card" open><summary>Letzte Mitteilungen</summary><div class="table-scroll"><table><thead><tr><th>Zeitpunkt</th><th>Projekt</th><th>Status</th></tr></thead><tbody>{% for d in deliveries %}<tr><td>{{d.created|localtime}}</td><td><a href="/projects/{{d.project_id}}">{{d.name}}</a></td><td>{{{'queued':'Wartet','sending':'Wird versandt','sent':'Versandt','failed':'Fehlgeschlagen','uncertain':'Zustellung unklar','cancelled':'Nicht versandt'}.get(d.status,d.status)}}{% if d.error %}<br><span class="field-help">{{d.error}}</span>{% endif %}</td></tr>{% else %}<tr><td colspan="3">Noch keine Mitteilungen.</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}

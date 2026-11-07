@@ -1,0 +1,97 @@
+name: Build release images
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag
+        required: true
+        default: candidate
+      publish:
+        description: Publish images to GHCR
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check public source and release configuration
+        run: |
+          python3 scripts/git_guard.py
+          python3 scripts/validate-compose.py --env-file /dev/null
+      - name: Build application for offline regression checks
+        run: docker build -t kiwm-ci-app -f app/Dockerfile .
+      - name: Run isolated offline checks without models or network
+        run: |
+          docker run --rm --network none --read-only --user 1000:1000 \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --tmpfs /tmp:size=256m,uid=1000,gid=1000 \
+            --tmpfs /config:size=4m,uid=1000,gid=1000 \
+            --tmpfs /secrets:size=4m,uid=1000,gid=1000 \
+            --mount type=volume,src=kiwm-ci-data,dst=/data \
+            -e KIWM_TEST_CONTAINER=1 --entrypoint python kiwm-ci-app \
+            /app/run-checks.py --output /data/qa/ci
+  images:
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: app
+            context: .
+            dockerfile: app/Dockerfile
+          - component: page-reader
+            context: .
+            dockerfile: app/page-reader.Dockerfile
+          - component: browser
+            context: browser
+            dockerfile: browser/Dockerfile
+          - component: proxy
+            context: proxy
+            dockerfile: proxy/Dockerfile
+          - component: ingress
+            context: ingress
+            dockerfile: ingress/Dockerfile
+    steps:
+      - uses: actions/checkout@v6
+      - name: Resolve image name
+        id: image
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          python3 - <<'PY'
+          import os,re
+          tag=os.environ['REQUESTED_TAG'] or os.environ['GITHUB_REF_NAME']
+          if not os.environ['REQUESTED_TAG'] and tag.startswith('v'):
+              tag=tag[1:]
+          if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}',tag):
+              raise SystemExit('Invalid Docker image tag')
+          repo=os.environ['GITHUB_REPOSITORY'].lower()
+          with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
+              stream.write('name=ghcr.io/'+repo+'-'+os.environ['COMPONENT']+':'+tag+'\n')
+          PY
+      - name: Log in to GHCR
+        if: github.event_name == 'push' || inputs.publish
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build image
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' || inputs.publish }}
+          tags: ${{ steps.image.outputs.name }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

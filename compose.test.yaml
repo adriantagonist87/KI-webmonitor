@@ -1,0 +1,56 @@
+# Optionales Testzubehör; kein Bestandteil des normalen Portainer-Stacks.
+# docker compose -f compose.yaml -f compose.test.yaml up -d --wait
+services:
+  app:
+    environment:
+      KIWM_TEST_TOOLS: '1'
+      MAILPIT_UI_URL: http://localhost:${MAILPIT_PORT:-8767}
+    depends_on:
+      mailpit: {condition: service_healthy}
+      fixture: {condition: service_healthy}
+  gateway:
+    environment:
+      KIWM_TEST_SMTP_HOST: mailpit
+  proxy:
+    environment:
+      FIXTURE_IP: ${FIXTURE_IP:-172.29.133.40}
+  ingress:
+    environment:
+      KIWM_TEST_TOOLS: '1'
+    ports:
+      - '127.0.0.1:${MAILPIT_PORT:-8767}:8082'
+    depends_on:
+      mailpit: {condition: service_healthy}
+  mailpit:
+    image: axllent/mailpit:v1.33.0
+    restart: unless-stopped
+    user: '1000:1000'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    tmpfs: ['/tmp:size=64m,uid=1000,gid=1000']
+    environment: {MP_DATABASE: /tmp/mailpit.db, MP_MAX_MESSAGES: '200'}
+    networks: [monitor]
+    logging:
+      options: {max-size: 5m, max-file: '3'}
+    healthcheck:
+      test: [CMD, /mailpit, readyz]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+  fixture:
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.12}
+    restart: unless-stopped
+    user: '1000:1000'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    tmpfs: ['/tmp:size=32m,uid=1000,gid=1000', '/tests:size=4m,uid=1000,gid=1000']
+    environment: {ROLE: fixture}
+    networks:
+      monitor:
+        ipv4_address: ${FIXTURE_IP:-172.29.133.40}
+    logging:
+      options: {max-size: 5m, max-file: '3'}

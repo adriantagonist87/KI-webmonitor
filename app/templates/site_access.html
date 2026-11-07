@@ -1,0 +1,36 @@
+<div class="page-heading"><div><h1>Webseitenzugang</h1><p class="source">{{project.name}}</p></div></div>
+{% if access_error %}<div class="warning" role="alert">{{icon('alert')}}<span>{{access_error}}</span></div>{% endif %}
+{% if access_saved %}<p role="status">{{access_saved}}</p>{% endif %}
+<section class="card">
+{% if access.supported %}
+<form method="post" action="/projects/{{project.id}}/access" autocomplete="off" data-site-access-form><input type="hidden" name="csrf" value="{{csrf}}">
+<div class="field-group"><label for="access-provider">Anmeldeverfahren</label><select id="access-provider" name="provider" data-access-provider>
+{% if access_config.origin=='https://www.elektro.net' %}<option value="elektro_subscription" {% if access_config.provider=='elektro_subscription' %}selected{% endif %}>elektro.net · ABO-Login</option>{% endif %}
+<option value="generic_form" {% if access_config.provider=='generic_form' %}selected{% endif %}>Webseitenformular</option></select></div>
+<label class="check-label"><input type="checkbox" name="enabled" {% if access.enabled %}checked{% endif %}>Automatische Anmeldung</label>
+<fieldset data-access-fields="elektro_subscription" {% if access_config.provider!='elektro_subscription' %}hidden{% endif %}>
+<legend>ABO-Zugang</legend><div class="form-grid"><div class="field-group"><label for="site-abo">Abonummer</label><input id="site-abo" name="abonummer" type="password" inputmode="numeric" autocomplete="off" data-lpignore="true" data-1p-ignore="true" minlength="9" maxlength="9" pattern="[0-9]{9}" placeholder="{{'Gespeichert · leer lassen zum Behalten' if access.configured else 'Neun Ziffern'}}"></div>
+<div class="field-group"><label for="site-postcode">PLZ</label><input id="site-postcode" name="postcode" type="password" inputmode="numeric" autocomplete="off" data-lpignore="true" data-1p-ignore="true" minlength="5" maxlength="5" pattern="[0-9]{5}" placeholder="{{'Gespeichert · leer lassen zum Behalten' if access.configured else 'Fünf Ziffern'}}"></div></div></fieldset>
+<fieldset data-access-fields="generic_form" {% if access_config.provider!='generic_form' %}hidden{% endif %}>
+<legend>Webseitenformular</legend>
+<div class="field-group"><label for="site-login-url">Anmeldeseite</label><input id="site-login-url" name="login_url" type="url" value="{{access_config.login_url}}" autocomplete="off"><p class="field-help">Die tatsächliche Login-Adresse derselben HTTPS-Website. Du kannst sie im Brave-Browser ablesen.</p></div>
+<div class="form-grid"><div class="field-group"><label for="site-username">Benutzername / E-Mail / Kundennummer</label><input id="site-username" name="username" type="password" autocomplete="off" data-lpignore="true" data-1p-ignore="true" maxlength="512" placeholder="{{'Gespeichert · leer lassen zum Behalten' if access.configured else 'Benutzerkennung'}}"></div>
+<div class="field-group"><label for="site-password">Passwort / Zugangscode</label><input id="site-password" name="password" type="password" autocomplete="off" data-lpignore="true" data-1p-ignore="true" maxlength="4096" placeholder="{{'Gespeichert · leer lassen zum Behalten' if access.configured else 'Passwort'}}"></div></div>
+<details class="advanced-settings"><summary>Erweiterte Formularauswahl</summary>
+<p class="field-help">Die Standards passen zu vielen einseitigen Loginformularen. Falls die Anmeldung nicht eindeutig erkannt wird, wähle die konkreten Felder über ihre HTML-<code>id</code> oder <code>name</code>. Beispiel: <code>#login-form</code>, <code>input[name="email"]</code>. Keine Zugangswerte in Selektoren eintragen.</p>
+<div class="field-group"><label for="site-submit-url">Formularziel</label><input id="site-submit-url" name="submit_url" type="url" value="{{access_config.submit_url}}"><p class="field-help">Die Adresse aus <code>action</code> des Loginformulars. Leer lassen verwendet die Anmeldeseite. Nur dieselbe HTTPS-Adresse ist erlaubt.</p></div>
+<div class="form-grid"><div class="field-group"><label for="site-form-selector">Formular</label><input id="site-form-selector" name="form_selector" value="{{access_config.form_selector}}" maxlength="500" spellcheck="false"></div>
+<div class="field-group"><label for="site-user-selector">Benutzerfeld</label><input id="site-user-selector" name="username_selector" value="{{access_config.username_selector}}" maxlength="500" spellcheck="false"></div>
+<div class="field-group"><label for="site-pass-selector">Passwortfeld</label><input id="site-pass-selector" name="password_selector" value="{{access_config.password_selector}}" maxlength="500" spellcheck="false"></div>
+<div class="field-group"><label for="site-submit-selector">Anmeldeknopf</label><input id="site-submit-selector" name="submit_selector" value="{{access_config.submit_selector}}" maxlength="500" spellcheck="false"></div>
+<div class="field-group"><label for="site-success-selector">Erfolgsmerkmal nach Anmeldung</label><input id="site-success-selector" name="success_selector" value="{{access_config.success_selector}}" maxlength="500" spellcheck="false"><p class="field-help">Ein eindeutiges sichtbares Element im angemeldeten Bereich, etwa ein Abmelden-Link. Ein allgemeines <code>body</code> oder irgendein Cookie genügt nicht.</p></div>
+<div class="field-group"><label for="site-consent-selector">Cookie-Akzeptieren-Knopf · optional</label><input id="site-consent-selector" name="consent_selector" value="{{access_config.consent_selector}}" maxlength="500" spellcheck="false"></div>
+<div class="field-group"><label for="site-close-selector">Werbefenster-Schließen-Knopf · optional</label><input id="site-close-selector" name="close_selector" value="{{access_config.close_selector}}" maxlength="500" spellcheck="false"></div></div>
+<p class="field-help">Unterstützt werden einseitige POST-Loginformulare derselben Website. SSO auf anderen Domains, Captchas und interaktive Zwei-Faktor-Abfragen benötigen eine manuelle Anmeldung im Brave-Browser. Mehrdeutige Formulare werden nicht abgesendet.</p>
+</details></fieldset>
+<p class="field-help">Zugangsdaten liegen getrennt vom Prompt und werden nicht an die KI gesendet. Gespeicherte Werte erscheinen hier nicht. Leere Zugangsfelder behalten die bestehenden Werte.</p>
+<details><summary>So verwendest du den Zugang im Prompt</summary><p>Die Anwendung meldet sich vor der Analyse an. Schreibe nur den Arbeitsauftrag, keine Passwörter oder Kundennummern:</p><blockquote>Verwende den im Projekt hinterlegten Webseitenzugang. Öffne danach die Start-URL und prüfe die neuen Veröffentlichungen. Wenn die Anmeldung nicht bestätigt werden kann, melde die fehlenden Quellen; behaupte keine vollständige Prüfung. Keine Kontoeinstellungen ändern.</blockquote></details>
+{% if access.configured %}<label class="check-label"><input type="checkbox" name="clear">Gespeicherte Zugangsdaten entfernen und automatische Anmeldung ausschalten</label>{% endif %}
+<div class="form-footer"><button data-loading="Speichert …">{{icon('check')}}<span data-button-label>Speichern</span></button><a class="button neutral" href="/projects/{{project.id}}">Abbrechen</a></div></form>
+{% else %}<p>Automatische Zugangsdaten können für HTTPS-Projekte hinterlegt werden. Verwende für unverschlüsselte Websites die manuelle Browsersitzung.</p>{% endif %}
+</section>

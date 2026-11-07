@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+if [ -n "${KIWM_PYTHON:-}" ]; then
+    exec "$KIWM_PYTHON" scripts/git_guard.py
+fi
+if command -v python3 >/dev/null 2>&1; then
+    exec python3 scripts/git_guard.py
+fi
+exec python scripts/git_guard.py
