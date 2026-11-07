@@ -11,8 +11,8 @@ benötigt Linux amd64 und Docker Standalone.
 
 | Portainer-Feld | Wert |
 | --- | --- |
-| Name | `ai-webmonitor-test` |
-| Repository URL | `https://github.com/adriantagonist87/ai-webmonitor.git` |
+| Name | `ki-webmonitor-test` |
+| Repository URL | `https://github.com/adriantagonist87/KI-webmonitor.git` |
 | Repository reference | `refs/tags/v1.5.12` |
 | Compose path für Zugriff im LAN | `portainer-lan-stack.yaml` |
 | Compose path für Zugriff per SSH-Tunnel | `portainer-stack.yaml` |
@@ -23,6 +23,9 @@ Unter **Environment variables** eintragen:
 IMAGE_PREFIX=ghcr.io/adriantagonist87/ai-webmonitor
 VERSION=1.5.12
 ```
+
+Die bestehenden Containerpakete behalten ihren Namen `ai-webmonitor`, damit
+Portainer-Installationen denselben Image-Pfad weiterverwenden können.
 
 Für den LAN-Stack zusätzlich `KIWM_LAN_IP` mit der Adresse des Test-LXC,
 `KIWM_LAN_SUBNET` mit dem eigenen Netz in CIDR-Schreibweise sowie
@@ -102,6 +105,9 @@ VERSION=1.5.12
 
 Der Stack verwendet dann `${IMAGE_PREFIX}-app`, `-browser`, `-proxy`, `-ingress` und `-page-reader`.
 `OWNER/REPOSITORY` ist bei einem eigenen Fork entsprechend zu ersetzen.
+Bei Bedarf legt die GitHub-Actions-Repositoryvariable `KIWM_IMAGE_PREFIX` den
+GHCR-Pfad für künftige Builds fest. Ohne Variable leitet der Workflow ihn vom
+Repository-Namen ab.
 Neue GHCR-Pakete beginnen mit privater Sichtbarkeit. Öffentliche Pakete
 lassen sich ohne Registry-Anmeldung beziehen.
 

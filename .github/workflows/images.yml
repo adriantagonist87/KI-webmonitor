@@ -67,6 +67,7 @@ jobs:
         env:
           REQUESTED_TAG: ${{ inputs.tag }}
           COMPONENT: ${{ matrix.component }}
+          IMAGE_PREFIX: ${{ vars.KIWM_IMAGE_PREFIX }}
         run: |
           python3 - <<'PY'
           import os,re
@@ -75,9 +76,11 @@ jobs:
               tag=tag[1:]
           if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}',tag):
               raise SystemExit('Invalid Docker image tag')
-          repo=os.environ['GITHUB_REPOSITORY'].lower()
+          prefix=os.environ['IMAGE_PREFIX'] or 'ghcr.io/'+os.environ['GITHUB_REPOSITORY'].lower()
+          if not re.fullmatch(r'ghcr\.io/[a-z0-9-]+/[a-z0-9]+(?:[._-]+[a-z0-9]+)*',prefix):
+              raise SystemExit('Invalid GHCR image prefix')
           with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
-              stream.write('name=ghcr.io/'+repo+'-'+os.environ['COMPONENT']+':'+tag+'\n')
+              stream.write('name='+prefix+'-'+os.environ['COMPONENT']+':'+tag+'\n')
           PY
       - name: Log in to GHCR
         if: github.event_name == 'push' || inputs.publish

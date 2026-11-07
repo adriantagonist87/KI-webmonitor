@@ -1,5 +1,8 @@
 # KI-Webmonitor
 
+Die [Projektübersicht mit Screenshots](README.md) führt durch die Funktionen und
+die Installation direkt aus GitHub. Diese Seite beschreibt zusätzliche Betriebsdetails.
+
 Webseiten und ihre verlinkten Dokumente mit einem lokalen KI-Server überwachen.
 Brave, Anwendung und Daten laufen in Docker. Die KI-Inferenz erfolgt ausschließlich
 über einen selbst betriebenen OpenAI-kompatiblen oMLX-Server; der Stack enthält
@@ -10,12 +13,13 @@ keine Modelle und benötigt keinen Cloud-KI-Anbieter.
 - Optionaler [visueller Bedienmodus mit echter Maus und Tastatur](docs/VISUELLE-BROWSERBEDIENUNG.md), pro Projekt wählbar und zunächst in Erprobung.
 - Technischer Webseitenvergleich und verständliche, aufklappbare Berichte.
 - Vollständiger Dateidownload, **SHA-256-Vergleich und Dateimetadaten**.
-- Keine OCR, Textextraktion oder KI-Inhaltsanalyse von Dokumentdateien.
+- Der digitale Text der ersten Seite kann zur Ermittlung des Dokumenttitels
+  verwendet werden. Der Dateivergleich erfolgt per Hash, ohne OCR.
 - HTML-Wochenbericht mit Textalternative; konfigurierbarer SMTP-Versand.
 - Telegram-Sofortmeldungen mit KI-Auswertung bei Änderungen und Prüfproblemen.
 - Dateiverzeichnis, ZIP nach Projektordnern, Export und Reimport.
 
-## Schnellstart mit Portainer
+## Offline-Installation mit Portainer
 
 1. Die fünf Release-Images auf dem Linux-Docker-Host laden oder aus der eigenen
    Registry beziehen. Ein vorhandenes Offline-Imagepaket lässt sich so laden:
@@ -33,7 +37,9 @@ keine Modelle und benötigt keinen Cloud-KI-Anbieter.
    automatisch. Kein Bootstrap-Skript und keine vorbereiteten Host-Verzeichnisse
    sind bei einer neuen Installation erforderlich.
 
-Die fünf Images lassen sich mit Docker Compose aus dem Quellcode bauen.
+Die [Installation mit veröffentlichten Images](docs/PORTAINER.md#testinstallation-aus-github)
+ist ohne diesen Offline-Schritt möglich. Die fünf Images lassen sich auch mit
+Docker Compose aus dem Quellcode bauen.
 Der [GitHub-Workflow](.github/workflows/images.yml) kann Images in die Registry
 des eigenen Repositories veröffentlichen. Beispieladressen mit `OWNER` sind
 Platzhalter. [Portainer und Releases](docs/PORTAINER.md)
@@ -95,7 +101,8 @@ prüfen. Nach Portänderungen den Tunnel entsprechend anpassen.
 Eine erste Fassung ist ein Ausgangsstand. Dateien werden vollständig geladen;
 gleiche Bytes gelten als unverändert, andere Bytes als **Datei geändert**.
 Ein neues HTTP-Datum allein beweist keine Dateiänderung. Verfügbare PDF- und
-HTTP-Datumsmetadaten werden zusätzlich angezeigt, ohne Dokumentinhalt auszulesen.
+HTTP-Datumsmetadaten werden zusätzlich angezeigt. Die optionale Titelermittlung
+aus dem digitalen Text von Seite eins läuft unabhängig davon.
 HTML-Artikel und sichtbare Webseiteninhalte kann die KI weiterhin auswerten.
 
 ## Prüfungen, Berichte und Speicher
