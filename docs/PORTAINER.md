@@ -4,7 +4,40 @@
 stimmt bytegleich mit `compose.yaml` überein. Testportal, Test-SMTP und
 administrative Hilfscontainer gehören nicht zum Standardstack.
 
-## Starten
+## Testinstallation aus GitHub
+
+In Portainer **Stacks → Add stack → Git repository** wählen. Der Docker-Host
+benötigt Linux amd64 und Docker Standalone.
+
+| Portainer-Feld | Wert |
+| --- | --- |
+| Name | `ai-webmonitor-test` |
+| Repository URL | `https://github.com/adriantagonist87/ai-webmonitor.git` |
+| Repository reference | `refs/tags/v1.5.12` |
+| Compose path für Zugriff im LAN | `portainer-lan-stack.yaml` |
+| Compose path für Zugriff per SSH-Tunnel | `portainer-stack.yaml` |
+
+Unter **Environment variables** eintragen:
+
+```dotenv
+IMAGE_PREFIX=ghcr.io/adriantagonist87/ai-webmonitor
+VERSION=1.5.12
+```
+
+Für den LAN-Stack zusätzlich `KIWM_LAN_IP` mit der Adresse des Test-LXC,
+`KIWM_LAN_SUBNET` mit dem eigenen Netz in CIDR-Schreibweise sowie
+`KIWM_ADMIN_USERNAME` und `KIWM_ADMIN_PASSWORD` setzen. Das Passwort muss
+mindestens zwölf Zeichen haben. Danach **Deploy the stack** wählen.
+Die Oberfläche ist im LAN unter `http://<LXC-IP>:8765/` erreichbar. Beim
+Standardstack ohne LAN-Freigabe erfolgt der Zugriff über den SSH-Tunnel.
+Die Verbindung zum eigenen oMLX-Server lässt sich nach der Anmeldung in
+den Webeinstellungen eintragen.
+
+Für einen öffentlichen Erststart müssen alle fünf Images der angegebenen
+Version in der Container Registry anonym abrufbar sein. Der öffentliche
+GitHub-Quellcode allein liefert die Stack-Datei.
+
+## Installation mit lokal geladenen Images
 
 Die fünf Images `ki-webmonitor-app`, `ki-webmonitor-browser`, `ki-webmonitor-proxy`,
 `ki-webmonitor-ingress` und `ki-webmonitor-page-reader` mit dem Tag `1.5.12` auf den
@@ -68,10 +101,9 @@ VERSION=1.5.12
 ```
 
 Der Stack verwendet dann `${IMAGE_PREFIX}-app`, `-browser`, `-proxy`, `-ingress` und `-page-reader`.
-`OWNER/REPOSITORY` ist ein Platzhalter. Es wurde bisher kein Repository gepusht
-und kein Image öffentlich veröffentlicht. Lizenzen und Asset-Rechte vor einer
-öffentlichen Veröffentlichung prüfen. Die lokale Auslieferung enthält keine
-Laufzeitdaten, Browserprofile, API-/SMTP- oder Webseitenzugangsdaten.
+`OWNER/REPOSITORY` ist bei einem eigenen Fork entsprechend zu ersetzen.
+Neue GHCR-Pakete beginnen mit privater Sichtbarkeit. Öffentliche Pakete
+lassen sich ohne Registry-Anmeldung beziehen.
 
 Referenzen: [Portainer-Stacks](https://docs.portainer.io/user/docker/stacks/add),
 [Docker-Volumes](https://docs.docker.com/engine/storage/volumes/),
