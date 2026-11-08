@@ -21,26 +21,17 @@ Der Monitor eignet sich für Seiten, die du sonst regelmäßig von Hand prüfen 
 - **Neue Beiträge und Angebote.** Sammle neue Artikel, Stellenanzeigen oder Ausschreibungen, die zu einem Thema passen.
 - **Aktualisierte Unterlagen.** Prüfe, ob ein Formular, eine Preisliste oder eine Anleitung ausgetauscht wurde, auch wenn der Downloadlink gleich bleibt.
 
-## Schnellstart in Portainer
+## Installation
 
-Vorausgesetzt werden ein Linux-Docker-Host mit `amd64`, Docker Standalone und ein erreichbarer oMLX-Server für die KI-Funktionen. Portainer kann die fertigen Container-Images öffentlich aus GHCR laden.
+Der KI-Webmonitor läuft auf einem Linux-Docker-Host mit `amd64`. Alle drei Wege verwenden dieselben veröffentlichten Images und unterstützen den Zugriff per SSH-Tunnel oder im lokalen Netz.
 
-1. **Stacks → Add stack → Git repository** öffnen. Als Stack-Namen beispielsweise `ki-webmonitor` verwenden.
-2. Repository `https://github.com/adriantagonist87/KI-webmonitor.git` und Referenz `refs/tags/v1.5.12` eintragen. Die Repository-Anmeldung kann aus bleiben.
-3. Für Zugriff über einen SSH-Tunnel `portainer-stack.yaml` wählen. Für Zugriff im LAN `portainer-lan-stack.yaml` verwenden und `KIWM_LAN_IP` sowie `KIWM_LAN_SUBNET` mit der Host-Adresse und dem eigenen Netz in CIDR-Schreibweise setzen.
-4. Die folgenden Werte unter **Environment variables** hinterlegen. Den Adminnamen und ein eigenes Passwort mit mindestens zwölf Zeichen in Portainer eingeben.
+| Installationsweg | Anleitung |
+| --- | --- |
+| **Portainer** | [Stack aus dem Release-Tag laden](docs/PORTAINER.md#testinstallation-aus-github) |
+| **Dockhand** | [Git-Stack oder lokalen Stack im Editor anlegen](docs/DOCKHAND.md) |
+| **Docker Compose** | [Projekt im Terminal einrichten und starten](docs/COMPOSE.md) |
 
-   ```dotenv
-   IMAGE_PREFIX=ghcr.io/adriantagonist87/ai-webmonitor
-   VERSION=1.5.12
-   KIWM_ADMIN_USERNAME=
-   KIWM_ADMIN_PASSWORD=
-   ```
-
-5. Den Stack starten. Im LAN die Adresse `http://<DOCKER-HOST>:8765/` öffnen oder über den SSH-Tunnel `http://localhost:8765/` aufrufen.
-6. Unter **Einstellungen** die oMLX-Adresse, den API-Token und das Modell hinterlegen und die Verbindung testen. Dieselben Werte können als `KIWM_OMLX_URL`, `KIWM_OMLX_API_KEY` und `KIWM_MODEL` in Portainer gesetzt werden. Nichtleere ENV-Werte haben Vorrang vor den Einstellungen in der App. Für Text, Tool Calling und Vision lassen sich bei Bedarf getrennte Modelle wählen.
-
-Die veröffentlichten Containerpakete behalten den Pfad `ai-webmonitor`. Für Docker Compose, SSH-Portweiterleitung, LAN-Einstellungen und Updates siehe [Portainer und Release-Images](docs/PORTAINER.md) und [LAN-Zugang](docs/LAN-ZUGANG.md).
+Für die KI-Funktionen benötigt der Stack einen erreichbaren oMLX-Server. Nach der Anmeldung unter **Einstellungen** die oMLX-Adresse, den API-Token und das Modell hinterlegen und die Verbindung testen. Dieselben Werte lassen sich als `KIWM_OMLX_URL`, `KIWM_OMLX_API_KEY` und `KIWM_MODEL` in der Stack-Konfiguration setzen. Nichtleere Umgebungsvariablen haben Vorrang vor den Einstellungen in der App. Für Text, Tool Calling und Vision lassen sich bei Bedarf getrennte Modelle wählen.
 
 ## Ein Projekt einrichten
 
@@ -92,7 +83,7 @@ Das **Globale Dateiverzeichnis** bietet Suche und Sortierung über Projekte hinw
 
 | Thema | Dokumentation |
 | --- | --- |
-| Installation, ENV-Werte und Image-Build | [Portainer und Release-Images](docs/PORTAINER.md), [.env.example](.env.example), [erweiterte ENV-Werte](advanced.env.example) |
+| Umgebungsvariablen und Image-Build | [Beispiel für `.env`](.env.example), [erweiterte Variablen](advanced.env.example), [Release-Images bauen](docs/PORTAINER.md#github-und-registry) |
 | Sicherung, Wiederherstellung und Updates | [Betrieb](docs/OPERATIONS.md) |
 | Adminzugang und externer Zugriff | [Anmeldung](docs/ANMELDUNG.md), [Cloudflare Tunnel](docs/CLOUDFLARE.md) |
 | Browser, Dienste und Netzgrenzen | [Architektur](docs/ARCHITEKTUR.md), [visuelle Brave-Bedienung](docs/VISUELLE-BROWSERBEDIENUNG.md) |

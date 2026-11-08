@@ -168,6 +168,9 @@ die lokalen App-/Browserports. Brave benötigt in der getesteten LXC
 
 ## Compose und Entwicklung
 
+Für den Einstieg mit den veröffentlichten Images gibt es eigene Anleitungen
+für [Docker Compose im Terminal](docs/COMPOSE.md) und [Dockhand](docs/DOCKHAND.md).
+
 `compose.yaml` und `portainer-stack.yaml` sind identisch und verwenden fertige
 Images. Nach dem Laden der Images genügt:
 

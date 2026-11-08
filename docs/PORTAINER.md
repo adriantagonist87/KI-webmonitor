@@ -17,22 +17,25 @@ benötigt Linux amd64 und Docker Standalone.
 | Compose path für Zugriff im LAN | `portainer-lan-stack.yaml` |
 | Compose path für Zugriff per SSH-Tunnel | `portainer-stack.yaml` |
 
+Die Repository-Anmeldung kann für das öffentliche Repository ausgeschaltet bleiben.
 Unter **Environment variables** eintragen:
 
 ```dotenv
 IMAGE_PREFIX=ghcr.io/adriantagonist87/ai-webmonitor
 VERSION=1.5.12
+KIWM_ADMIN_USERNAME=
+KIWM_ADMIN_PASSWORD=
 ```
 
 Die bestehenden Containerpakete behalten ihren Namen `ai-webmonitor`, damit
 Portainer-Installationen denselben Image-Pfad weiterverwenden können.
 
-Für den LAN-Stack zusätzlich `KIWM_LAN_IP` mit der Adresse des Test-LXC,
-`KIWM_LAN_SUBNET` mit dem eigenen Netz in CIDR-Schreibweise sowie
-`KIWM_ADMIN_USERNAME` und `KIWM_ADMIN_PASSWORD` setzen. Das Passwort muss
-mindestens zwölf Zeichen haben. Danach **Deploy the stack** wählen.
-Die Oberfläche ist im LAN unter `http://<LXC-IP>:8765/` erreichbar. Beim
-Standardstack ohne LAN-Freigabe erfolgt der Zugriff über den SSH-Tunnel.
+Einen eigenen Adminnamen und ein Passwort mit mindestens zwölf Zeichen setzen.
+Für den LAN-Stack zusätzlich `KIWM_LAN_IP` mit der Adresse des Docker-Hosts und
+`KIWM_LAN_SUBNET` mit dem eigenen Netz in CIDR-Schreibweise setzen. Danach
+**Deploy the stack** wählen. Die Oberfläche ist im LAN unter
+`http://<DOCKER-HOST>:8765/` erreichbar. Beim Standardstack erfolgt der Zugriff
+über einen [SSH-Tunnel](COMPOSE.md#zugriff-per-ssh-tunnel).
 Die Verbindung zum eigenen oMLX-Server lässt sich nach der Anmeldung in
 den Webeinstellungen eintragen.
 
@@ -57,8 +60,8 @@ leeren KI-Werten erfolgt die Konfiguration vollständig in der Weboberfläche.
 Daten-Volumes werden automatisch mit passenden Dateirechten angelegt. Portainer
 zeigt sie unter **Volumes** an. Bootstrap und lokale Builds sind nicht erforderlich.
 
-Die Ports bleiben auf dem Docker-Host lokal gebunden. Zugriff per SSH-Tunnel
-wie in der README. Bestehende Verzeichnisse lassen sich über die vier
+Die Ports bleiben auf dem Docker-Host lokal gebunden. Der Zugriff erfolgt per
+[SSH-Tunnel](COMPOSE.md#zugriff-per-ssh-tunnel). Bestehende Verzeichnisse lassen sich über die vier
 `KIWM_DATA`, `KIWM_CONFIG`, `KIWM_SECRETS`, `KIWM_BROWSER_DATA`-Werte aus
 `advanced.env.example` ausdrücklich weiterverwenden. Bereits initialisierte
 Bind-Verzeichnisse müssen vorher existieren und UID/GID 1000 gehören.
