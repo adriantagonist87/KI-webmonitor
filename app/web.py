@@ -30,6 +30,7 @@ import scheduling
 import site_safety
 import tag_registry
 import project_lifecycle
+import history_cleanup
 import project_icons
 import email_reports
 import distributions
@@ -154,6 +155,8 @@ NOTICES = {
     'report_retry':'Versand erneut vorgemerkt','project_saved':'Projekt gespeichert.','ki_saved':'KI-Konfiguration gespeichert.','smtp_saved':'E-Mail-Einstellungen gespeichert.','reviewed':'Angezeigte Änderungen als geprüft markiert.','manual_on':'Manueller Browsermodus aktiviert.','manual_off':'Manueller Browsermodus beendet.','models_loaded':'Modellliste aktualisiert.','test_done':'Verbindungstest abgeschlossen.','report_created':'Testbericht erstellt. Versandstatus im Bericht prüfen.'}
 NOTICES.update(project_deleted='Projekt gelöscht.', tag_saved='Tag gespeichert.', tag_deleted='Tag entfernt.', schedule_saved='Globale Prüfzeit gespeichert.')
 NOTICES.update(storage_saved='Speicherregeln gespeichert.', storage_cleaned='Speicherbereinigung abgeschlossen.')
+NOTICES.update(history_cleaned='Prüfverlauf bereinigt.',
+               history_files_pending='Prüfverlauf bereinigt. Verbliebene Dateien können über eine neue Vorschau erneut bereinigt werden.')
 NOTICES.update(telegram_saved='Telegram-Einstellungen gespeichert.')
 
 def diff_markup(text):
@@ -971,8 +974,11 @@ async def manual_mode(request: Request):
 
 @app.get('/settings')
 async def config_page(request: Request):
+    return await render_settings(request)
+
+async def render_settings(request, history_preview=None):
     storage = await asyncio.to_thread(retention.inspect)
-    return render(request, 'settings', models=read_json(Path('/config/models.json')).get('models', []), capabilities=read_json(Path('/config/capabilities.json')), storage=storage, storage_policy=retention.policy(), config_sources=configuration_sources())
+    return render(request, 'settings', models=read_json(Path('/config/models.json')).get('models', []), capabilities=read_json(Path('/config/capabilities.json')), storage=storage, storage_policy=retention.policy(), config_sources=configuration_sources(), history_preview=history_preview)
 
 @app.post('/settings/storage')
 async def save_storage(request: Request):
@@ -1004,6 +1010,38 @@ async def cleanup_storage():
     if result.get('status') == 'skipped':
         raise HTTPException(409, 'Speicherbereinigung derzeit nicht möglich. Laufende Prüfungen zuerst abschließen lassen.')
     return RedirectResponse('/settings?notice=storage_cleaned#speicher', 303)
+
+@app.post('/settings/history/preview')
+async def preview_history(request: Request):
+    form = await request.form()
+    try:
+        mode, amount = history_cleanup.rule(form.get('mode'), form.get('amount'))
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from None
+    try:
+        result = await asyncio.to_thread(history_cleanup.preview, mode, amount)
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from None
+    return await render_settings(request, history_preview=result)
+
+@app.post('/settings/history/cleanup')
+async def cleanup_history(request: Request):
+    form = await request.form()
+    if form.get('confirm') != 'on':
+        raise HTTPException(400, 'Löschen zuerst ausdrücklich bestätigen.')
+    try:
+        mode, amount = history_cleanup.rule(form.get('mode'), form.get('amount'))
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from None
+    if engine.BUSY.locked() or engine.REPORT_LOCK.locked() or notifications.LOCK.locked():
+        raise HTTPException(409, 'Laufende Prüfungen, Berichte und Telegram-Versand zuerst abschließen lassen.')
+    try:
+        async with engine.BUSY, engine.REPORT_LOCK, notifications.LOCK:
+            result = await asyncio.to_thread(history_cleanup.clean, mode, amount, form.get('fingerprint'))
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from None
+    notice = 'history_files_pending' if result['pending'] else 'history_cleaned'
+    return RedirectResponse('/settings?notice='+notice+'#pruefverlauf', 303)
 
 @app.post('/settings/omlx')
 async def save_omlx(request: Request):
@@ -1261,7 +1299,9 @@ async def transfer_export(request: Request):
         return FileResponse(target,media_type='application/zip' if extended else 'application/json',filename=f'Webmonitor-{stamp}'+('.zip' if extended else '.json'),background=BackgroundTask(shutil.rmtree,folder))
     except (transfer.Invalid,OSError,ValueError) as error:
         shutil.rmtree(folder,ignore_errors=True)
-        return transfer_error(request,str(error) if isinstance(error,transfer.Invalid) else 'Export fehlgeschlagen. Leserechte der Archivdateien und freien Speicher prüfen.')
+        if isinstance(error, PermissionError):
+            return transfer_error(request,'Export wegen fehlender Dateirechte abgebrochen. Eigentümer und Rechte für den App-Benutzer (UID 1000) prüfen.')
+        return transfer_error(request,str(error) if isinstance(error,transfer.Invalid) else 'Export fehlgeschlagen. Freien Speicher und Archivdateien prüfen.')
 
 @app.post('/transfer/preview')
 async def transfer_preview(request: Request):

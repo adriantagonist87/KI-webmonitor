@@ -1,5 +1,6 @@
-Release: 1.5.16
-Stand: 2026-11-08
+Release: 1.5.17
+Stand: 2026-11-09
+1.5.17: Globaler Prüfverlauf mit Vorschau und speicherschonender Export großer Archive.
 1.5.16: Schmales Brave-Fenster zur Erprobung und robuste Obsidian-Übersetzung.
 1.5.15: Versioniertes Browser-Icon, robusterer visueller Login und öffentlicher Obsidian-Changelog.
 1.5.14: Einheitlicher blau akzentuierter Schriftzug in App, Wochenbericht und GitHub-README.

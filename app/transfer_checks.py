@@ -56,10 +56,15 @@ class TransferTests(unittest.TestCase):
   self.assertFalse(store.settings()['smtp_enabled']);self.assertEqual(store.credentials()['omlx_key'],'KEEP')
   self.assertTrue((self.root/r['recovery']/'monitor.db').exists())
  def test_02_zip_history_files_and_idempotence(self):
-  path,p=self.package(True,True);self.select('target')
+  text='Originaltext mit Umlauten: äöü. '*20000
+  store.execute('UPDATE snapshots SET text=?,text_sha256=? WHERE run_id=?',(text,transfer.hashlib.sha256(text.encode()).hexdigest(),'new'))
+  with patch.object(transfer,'MAX_JSON',128*1024):
+   path,p=self.package(True,True)
+  self.select('target')
   transfer.import_package(path,p,apply_secrets=True,activate=True)
   for table in transfer.TABLES:self.assertEqual(len(store.rows('SELECT * FROM '+table)),len(p['history'][table]))
   for rel,entry in p['files'].items():self.assertEqual(transfer.file_hash(self.root/rel),entry['sha256'])
+  self.assertEqual(store.one("SELECT text FROM snapshots WHERE run_id='new'")['text'],text)
   self.assertEqual(store.credentials()['omlx_key'],'FAKE-TEST-KEY')
   self.assertEqual(store.one('SELECT enabled FROM projects')['enabled'],1)
   self.assertEqual(store.one('SELECT mail_status FROM reports')['mail_status'],'imported')
@@ -76,13 +81,18 @@ class TransferTests(unittest.TestCase):
   with self.assertRaises(transfer.Invalid):transfer.import_package(path,p)
   self.assertEqual(store.one('SELECT name FROM projects')['name'],before)
  def test_04_reject_archive_path_links_checksum_and_extra_files(self):
+  store.execute("UPDATE snapshots SET text='Quelle',text_sha256=? WHERE run_id='new'",(transfer.hashlib.sha256(b'Quelle').hexdigest(),))
   path,p=self.package();raw=path.read_bytes()
   with zipfile.ZipFile(io.BytesIO(raw)) as z:entries={i.filename:z.read(i) for i in z.infolist()}
-  for kind in ('traversal','symlink','checksum','extra','version'):
+  for kind in ('traversal','symlink','checksum','text-checksum','text-missing','extra','version'):
    bad=self.base/(kind+'.zip');items=dict(entries);payload=copy.deepcopy(p)
    if kind=='traversal':payload['files']['artifacts/../../secrets/stolen']={'size':0,'sha256':'0'*64}
    if kind=='checksum':
     rel=next(iter(payload['files']));items['files/'+rel]=b'corrupted'
+   if kind.startswith('text-'):
+    member=next(name for name in entries if name.startswith('snapshot-text/'))
+    if kind=='text-missing':items.pop(member)
+    else:items[member]=b'corrupted text'
    if kind=='extra':items['files/artifacts/unlisted.txt']=b'extra'
    if kind=='version':payload['version']=999
    items['webmonitor.json']=transfer.dump(payload)
@@ -169,7 +179,7 @@ class TransferTests(unittest.TestCase):
  def test_11_v2_public_auth_roundtrip_in_json_and_zip(self):
   expected=self.site_auth();packages=[self.package(False),self.package(True)]
   for index,(path,p) in enumerate(packages):
-   self.assertEqual(p['version'],transfer.VERSION)
+   self.assertEqual(p['version'],transfer.VERSION if index else transfer.CONFIG_VERSION)
    self.assertEqual(p['site_auth'],{'alpha':expected})
    self.select('auth-target-'+str(index))
    self.assertEqual(transfer.preview(p)['site_auth'],1)
@@ -250,6 +260,8 @@ class TransferTests(unittest.TestCase):
  def test_17_legacy_v1_zip_restores_history_without_changing_auth(self):
   self.site_auth();path,p=self.package(True)
   with zipfile.ZipFile(path) as z:entries={name:z.read(name) for name in z.namelist()}
+  for snapshot in p['history']['snapshots']:
+   if snapshot['text'] is None:snapshot['text']=entries.pop(transfer.snapshot_member(snapshot)).decode('utf-8')
   p['version']=1;p.pop('site_auth');p.pop('tag_registry');p['history'].pop('run_retries')
   for item in p['projects']:
    item.pop('use_global_schedule');item.pop('schedule_config');item.pop('telegram_enabled')
@@ -272,7 +284,7 @@ class TransferTests(unittest.TestCase):
   s=store.settings();s['global_schedule']=selected;store.save_json(store.CONFIG,s)
   store.execute('UPDATE projects SET use_global_schedule=1,schedule_config=?',(json.dumps({**scheduling.DEFAULT,'mode':'interval','interval':5}),))
   unused=tag_registry.save('Noch unbenutzt','#cc44aa')
-  path,p=self.package(False);self.assertEqual(p['version'],transfer.VERSION)
+  path,p=self.package(False);self.assertEqual(p['version'],transfer.CONFIG_VERSION)
   self.assertTrue(any(t['id']==unused for t in p['tag_registry']))
   self.select('v3-target');transfer.import_package(path,p,activate=True)
   self.assertEqual(store.settings()['global_schedule'],selected)

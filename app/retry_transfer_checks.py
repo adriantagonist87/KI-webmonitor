@@ -74,7 +74,7 @@ class RetryTransferChecks(unittest.TestCase):
     def test_01_configuration_does_not_export_runtime_retry_timer(self):
         self.add_run(); self.retry()
         path, value = self.package(history=False)
-        self.assertEqual(value['version'], transfer.VERSION)
+        self.assertEqual(value['version'], transfer.CONFIG_VERSION)
         self.assertIsNone(value['history'])
         self.assertNotIn('run_retries', value)
         self.assertIsNone(transfer.read_package(path)['credentials'])

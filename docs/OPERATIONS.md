@@ -8,6 +8,30 @@ nach Prozessabbruch/Hostneustart erneut; ein Zustand `unhealthy` allein löst
 keinen Neustart aus. Browserprofile und SQLite niemals gleichzeitig in zwei
 Installationen verwenden.
 
+## Prüfverlauf aller Projekte bereinigen
+
+Unter **Einstellungen → Prüfverlauf** die neuesten Prüfungen je Projekt,
+einen Zeitraum in Tagen oder den gesamten Prüfverlauf auswählen. Die Vorschau
+zeigt die Anzahl der Prüfungen und Projekte vor der endgültigen Bestätigung.
+Ein Zeitraum bezieht sich auf das Abschlussdatum der Prüfung. Laufende oder
+wartende Prüfungen müssen vorher abgeschlossen sein.
+
+Die Bereinigung entfernt die ausgewählten Läufe samt Änderungen und nicht
+mehr benötigten Belegen. Gemeinsam genutzte Dateien bleiben verfügbar, solange
+eine verbleibende Prüfung sie referenziert. Projekte, Zeitpläne und bereits
+gespeicherte Wochenberichte bleiben erhalten. Verweise alter Berichte auf
+gelöschte Prüfungen sind danach nicht mehr aufrufbar. Quellen ohne verbleibenden
+Vergleichsstand werden im nächsten Lauf neu erfasst. SQLite verwendet die
+freigewordenen Datenbankseiten für neue Einträge.
+
+Vor einer endgültigen Löschung kann unter **Export / Import** ein ZIP mit
+Verlauf gespeichert werden. Seit 1.5.17 werden die Seitentexte darin als
+separate ZIP-Einträge geschrieben. Der einfache JSON-Export ist weiterhin
+mit Version 8 des Transferformats kompatibel. Für einen ZIP-Import im neuen
+Format 9 mindestens App-Version 1.5.17 verwenden. Bei einem Rechtefehler
+die Eigentümerschaft der betroffenen Archivdatei für den App-Benutzer
+(UID 1000) prüfen.
+
 ## Vollständige Volume-Sicherung
 
 Die Oberfläche exportiert Projekte/Einstellungen und optional Verlauf/Dateien.

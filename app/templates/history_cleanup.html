@@ -1,0 +1,39 @@
+<section class="card" id="pruefverlauf">
+  <div class="panel-heading"><h2>Prüfverlauf aller Projekte bereinigen</h2></div>
+  <p class="field-help">Löscht ausgewählte Prüfungen, Änderungen und nicht mehr benötigte Belege. Projekte, Zeitpläne und gespeicherte Wochenberichte bleiben erhalten.</p>
+  <form method="post" action="/settings/history/preview#pruefverlauf">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <div class="form-grid">
+      <div class="field-group">
+        <label for="history-mode">Aufbewahren</label>
+        <select id="history-mode" name="mode">
+          {% for value,label in [('last','Letzte Prüfungen je Projekt'),('days','Prüfungen der letzten Tage'),('all','Gesamten Prüfverlauf löschen')] %}
+          <option value="{{value}}" {% if history_preview and history_preview.mode == value %}selected{% endif %}>{{label}}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field-group">
+        <label for="history-amount">Anzahl der Prüfungen oder Tage</label>
+        <input id="history-amount" name="amount" type="number" min="1" max="36500" step="1" value="{{history_preview.amount if history_preview and history_preview.amount is not none else 2}}">
+      </div>
+    </div>
+    <div class="form-footer"><button class="secondary" {% if busy %}disabled{% endif %}>{{icon('eye')}}Vorschau anzeigen</button></div>
+  </form>
+  {% if history_preview %}
+  <div class="details-body">
+    <p><strong>{{history_preview.runs}} Prüfungen in {{history_preview.projects}} Projekten</strong> zur Löschung ausgewählt.</p>
+    {% if history_preview.pending %}<p>{{history_preview.pending}} Dateien aus einer früheren Bereinigung werden erneut geprüft.</p>{% endif %}
+    {% if history_preview.runs or history_preview.pending %}
+    <p class="field-help">Diese Löschung ist endgültig. Quellen ohne verbleibenden Vergleichsstand werden bei der nächsten Prüfung neu erfasst.</p>
+    <form method="post" action="/settings/history/cleanup">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="mode" value="{{history_preview.mode}}">
+      <input type="hidden" name="amount" value="{{history_preview.amount if history_preview.amount is not none else ''}}">
+      <input type="hidden" name="fingerprint" value="{{history_preview.fingerprint}}">
+      <label class="check-label"><input type="checkbox" name="confirm" required>Endgültige Löschung bestätigen</label>
+      <div class="form-footer"><button class="danger" {% if busy %}disabled{% endif %}>{{icon('trash')}}Auswahl löschen</button></div>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>

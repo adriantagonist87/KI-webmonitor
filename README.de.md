@@ -25,7 +25,7 @@ keine Modelle und benötigt keinen Cloud-KI-Anbieter.
    Registry beziehen. Ein vorhandenes Offline-Imagepaket lässt sich so laden:
 
    ```sh
-   gzip -dc KI-Webmonitor-1.5.16-Images.tar.gz | docker image load
+   gzip -dc KI-Webmonitor-1.5.17-Images.tar.gz | docker image load
    ```
 
 2. In Portainer **Stacks → Add stack → Web editor** öffnen und
@@ -48,7 +48,7 @@ Platzhalter. [Portainer und Releases](docs/PORTAINER.md)
 
 | Variable | Standard / Wirkung |
 | --- | --- |
-| `VERSION` | `1.5.16`, gemeinsame Version der fünf Images |
+| `VERSION` | `1.5.17`, gemeinsame Version der fünf Images |
 | `WEB_PORT` | `8765`, geschützter Zugang zur Anwendung |
 | `BROWSER_PORT` | `8766`, geschützter Zugang zum grafischen Brave |
 | `KIWM_OMLX_URL` | Optional: Adresse des lokalen KI-Servers einschließlich Port |

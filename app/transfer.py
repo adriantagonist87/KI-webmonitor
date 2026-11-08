@@ -8,6 +8,7 @@ import sqlite3
 import stat
 import tempfile
 import zipfile
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
@@ -28,12 +29,14 @@ from functools import wraps
 from project_meta import normalize_color, normalize_tags
 
 FORMAT = 'ki-webmonitor'
-VERSION = 8
-SUPPORTED_VERSIONS = (1, 2, 3, 4, 5, 6, 7, VERSION)
+CONFIG_VERSION = 8
+VERSION = 9
+SUPPORTED_VERSIONS = range(1, VERSION + 1)
 MAX_UPLOAD = 512 * 1024**2
 MAX_JSON = 64 * 1024**2
 MAX_EXPANDED = 2 * 1024**3
 MAX_FILES = 50000
+MAX_SNAPSHOT_TEXT = 16 * 1024**2
 LEGACY_PROJECT_KEYS = ('id','name','url','prompt','domains','cron','enabled','created','color','tags')
 SCHEDULE_PROJECT_KEYS = (*LEGACY_PROJECT_KEYS, 'use_global_schedule', 'schedule_config')
 PROJECT_KEYS = (*SCHEDULE_PROJECT_KEYS, 'telegram_enabled')
@@ -77,6 +80,16 @@ def file_hash(path):
 
 def dump(value):
     return json.dumps(value,ensure_ascii=False,indent=2,allow_nan=False).encode('utf-8')
+
+def snapshot_member(snapshot):
+    return 'snapshot-text/'+identifier(snapshot['id'])+'.txt'
+
+def read_snapshot_text(archive,snapshot):
+    info=archive.getinfo(snapshot_member(snapshot))
+    require(0 < info.file_size <= MAX_SNAPSHOT_TEXT,'Quellentext überschreitet das Größenlimit.')
+    raw=archive.read(info)
+    require(hashlib.sha256(raw).hexdigest()==snapshot['text_sha256'],'Quellentext-Prüfsumme stimmt nicht.')
+    return raw.decode('utf-8')
 
 def record_key(table, record):
     return 'source_run_id' if table == 'run_retries' else 'id' if 'id' in record else 'change_id'
@@ -147,8 +160,9 @@ def storage_guard(exclusive):
 @storage_guard(exclusive=False)
 def export_to(destination, history=False, include_secrets=False):
     with store.db() as c:
-        c.execute('BEGIN')
         tag_registry.initialize(c)
+        c.commit()
+        c.execute('BEGIN')
         projects = [dict(r) for r in c.execute('SELECT * FROM projects ORDER BY name')]
         site_auth={}
         for project in projects:
@@ -156,7 +170,13 @@ def export_to(destination, history=False, include_secrets=False):
             if saved:
                 try:site_auth[project['id']]=json.loads(saved['value'])
                 except (ValueError,TypeError):raise Invalid('Gespeicherte Website-Zugangskonfiguration ist ungültig.')
-        payload = {'format':FORMAT,'version':VERSION,'created_at':store.now(),'kind':'archive' if history else 'configuration',
+        history_rows=None
+        if history:
+            history_rows={t:[dict(r) for r in c.execute('SELECT * FROM '+t)] for t in TABLES if t!='snapshots'}
+            columns=[r[1] for r in c.execute('PRAGMA table_info(snapshots)')]
+            projection=', '.join("CASE WHEN text='' THEN '' END AS text" if column=='text' else column for column in columns)
+            history_rows['snapshots']=[dict(r) for r in c.execute('SELECT '+projection+' FROM snapshots')]
+        payload = {'format':FORMAT,'version':VERSION if history else CONFIG_VERSION,'created_at':store.now(),'kind':'archive' if history else 'configuration',
                    'projects':[{k:r[k] for k in PROJECT_KEYS} for r in projects], 'settings':store.persisted_settings(),
                    'credentials':{k:v for k,v in store.persisted_credentials().items() if k in SECRET_KEYS} if include_secrets else None,
                    'tag_registry':[{k:r[k] for k in ('id','name','key','color')} for r in c.execute('SELECT * FROM tags ORDER BY key')],
@@ -166,13 +186,17 @@ def export_to(destination, history=False, include_secrets=False):
                    'crawl_profiles':{p['id']:site_safety.profile(p['id'],c) for p in projects},
                    'browser_modes':{p['id']:browser_mode.get(p,c) for p in projects},
                    'collection_indexes':[dict(r) for r in c.execute("SELECT * FROM state WHERE key LIKE 'collection_index:%'")] if history else [],
-                   'history':{t:[dict(r) for r in c.execute('SELECT * FROM '+t)] for t in TABLES} if history else None,
+                   'history':history_rows,
                    'content_scopes':[dict(r) for r in c.execute("SELECT * FROM state WHERE key LIKE 'content_scopes:%'")] if history else [],'files':{}}
         validate_site_auth(payload)
+        if history:
+            return write_archive(c,destination,payload)
     if not history:
         destination.write_bytes(dump(payload))
         os.chmod(destination,0o600)
         return payload
+
+def write_archive(c,destination,payload):
     entries = {}
     # Include all run evidence and presentation revisions, not just the current snapshot.
     for row in payload['history']['runs']:
@@ -191,13 +215,22 @@ def export_to(destination, history=False, include_secrets=False):
         for path in report_dir.rglob('*'):
             require(not path.is_symlink(),'Berichtsarchiv enthält einen symbolischen Link.')
             if path.is_file():entries[path.relative_to(store.DATA).as_posix()]=path
-    require(len(entries)<=MAX_FILES,'Zu viele Archivdateien; administratives Backup verwenden.')
-    require(sum(p.stat().st_size for p in entries.values())<=MAX_EXPANDED,'Archiv zu groß; administratives Backup verwenden.')
+    texts=[s for s in payload['history']['snapshots'] if s['text'] is None]
+    require(len(entries)+len(texts)<=MAX_FILES,'Zu viele Archivdateien; administratives Backup verwenden.')
+    expanded=sum(p.stat().st_size for p in entries.values())
+    require(expanded<=MAX_EXPANDED,'Archiv zu groß; administratives Backup verwenden.')
     with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED,compresslevel=5) as z:
         for relative,path in sorted(entries.items()):
             relative_file(relative)
             payload['files'][relative]={'size':path.stat().st_size,'sha256':file_hash(path)}
             z.write(path,'files/'+relative)
+        for snapshot in texts:
+            raw=c.execute('SELECT text FROM snapshots WHERE id=?',(snapshot['id'],)).fetchone()['text'].encode('utf-8')
+            require(0 < len(raw) <= MAX_SNAPSHOT_TEXT,'Quellentext überschreitet das Größenlimit.')
+            require(hashlib.sha256(raw).hexdigest()==snapshot['text_sha256'],'Quellentext-Prüfsumme stimmt nicht.')
+            expanded+=len(raw)
+            require(expanded<=MAX_EXPANDED,'Archiv zu groß; administratives Backup verwenden.')
+            z.writestr(snapshot_member(snapshot),raw)
         raw=dump(payload);require(len(raw)<=MAX_JSON,'JSON-Verlauf zu groß für den portablen Export.')
         z.writestr('webmonitor.json',raw)
     os.chmod(destination,0o600)
@@ -368,7 +401,10 @@ def validate(payload):
         except (ValueError,TypeError):raise Invalid('Ungültige Linkliste.')
         for key in ('file','screenshot','html'):
             if s.get(key):require(s[key] in manifest,'Ein referenzierter Quellenbeleg fehlt im Archiv.')
-        require(hashlib.sha256(s['text'].encode()).hexdigest()==s['text_sha256'],'Quellentext-Prüfsumme stimmt nicht.')
+        if payload['version']>=9 and s['text'] is None:
+            require(isinstance(s['text_sha256'],str) and re.fullmatch('[a-f0-9]{64}',s['text_sha256']),'Ungültige Quellentext-Prüfsumme.')
+        else:
+            require(isinstance(s['text'],str) and hashlib.sha256(s['text'].encode()).hexdigest()==s['text_sha256'],'Quellentext-Prüfsumme stimmt nicht.')
         if s['file']:require(manifest[s['file']]['sha256']==s['sha256'],'Dokument-Prüfsumme stimmt nicht.')
     for r in changes.values():
         require(r['run_id'] in runs and runs[r['run_id']]['project_id']==r['project_id'] and r['current_id'] in snaps and snaps[r['current_id']]['project_id']==r['project_id'] and (r['previous_id'] is None or r['previous_id'] in snaps and snaps[r['previous_id']]['project_id']==r['project_id']),'Ungültige Änderungszuordnung.')
@@ -410,10 +446,15 @@ def read_package(path):
                 require(sum(e.file_size for e in entries)<=MAX_EXPANDED+MAX_JSON,'Entpacktes Archiv übersteigt 2 GB.')
                 for e in entries:require(not e.flag_bits&1 and not stat.S_ISLNK(e.external_attr>>16) and not e.is_dir(),'Verschlüsselte Archive, Links oder Verzeichniseinträge sind nicht erlaubt.')
                 payload=json.loads(z.read('webmonitor.json'));validate(payload)
-                require(payload['kind']=='archive' and set(names)=={'webmonitor.json'}|{'files/'+r for r in payload['files']},'ZIP-Inhalt stimmt nicht mit dem Dateiverzeichnis überein.')
+                require(payload['kind']=='archive','ZIP muss einen Verlauf enthalten.')
+                texts=[s for s in payload['history']['snapshots'] if s['text'] is None]
+                require(set(names)=={'webmonitor.json'}|{'files/'+r for r in payload['files']}|{snapshot_member(s) for s in texts},'ZIP-Inhalt stimmt nicht mit dem Dateiverzeichnis überein.')
+                require(sum(e.file_size for e in entries if e.filename!='webmonitor.json')<=MAX_EXPANDED,'Entpacktes Archiv übersteigt 2 GB.')
                 for rel,entry in payload['files'].items():
                     info=z.getinfo('files/'+rel);require(info.file_size==entry['size'],'Dateigröße stimmt nicht.')
                     with z.open(info) as f:require(hashlib.file_digest(f,'sha256').hexdigest()==entry['sha256'],'Dateiprüfsumme stimmt nicht: '+rel)
+                for snapshot in texts:
+                    read_snapshot_text(z,snapshot)
                 return payload
         except (zipfile.BadZipFile,RuntimeError,UnicodeError,json.JSONDecodeError):raise Invalid('ZIP-Datei ist beschädigt oder unlesbar.')
     require(path.stat().st_size<=MAX_JSON,'JSON-Datei übersteigt 64 MB.')
@@ -446,7 +487,12 @@ def preflight(c,payload):
             old=c.execute('SELECT * FROM '+table+' WHERE '+key+'=?',(r[key],)).fetchone()
             if old:
                 # Existing evidence is never silently replaced by another version.
-                if table in ('snapshots','changes'):require(dict(old)==r,'Abweichender bestehender Beleg: '+table+'/'+r[key])
+                if table in ('snapshots','changes'):
+                    existing=dict(old)
+                    if table=='snapshots' and r['text'] is None:
+                        require(hashlib.sha256(existing['text'].encode()).hexdigest()==r['text_sha256'],'Abweichender bestehender Quellentext.')
+                        existing['text']=None
+                    require(existing==r,'Abweichender bestehender Beleg: '+table+'/'+r[key])
                 elif table=='runs':require(old['project_id']==r['project_id'],'Prüfungs-ID gehört zu einem anderen Projekt.')
                 elif table=='run_retries':
                     require(old['project_id']==r['project_id'] and old['due_at']==r['due_at']
@@ -474,7 +520,7 @@ def import_package(path,payload,apply_settings=True,apply_secrets=False,activate
     old_settings=store.CONFIG.read_bytes() if store.CONFIG.exists() else None
     old_secrets=store.SECRETS.read_bytes() if store.SECRETS.exists() else None
     created=[];config_written=False;secrets_written=False
-    with store.db() as c:
+    with store.db() as c, ExitStack() as archives:
         c.execute('BEGIN IMMEDIATE')
         try:
             preflight(c,payload)
@@ -540,6 +586,8 @@ def import_package(path,payload,apply_settings=True,apply_secrets=False,activate
                 keys=list(item)
                 c.execute('INSERT INTO distributions('+','.join(keys)+') VALUES('+','.join('?' for _ in keys)+') ON CONFLICT(id) DO UPDATE SET '+','.join(k+'=excluded.'+k for k in keys if k!='id'),[item[k] for k in keys])
             added={}
+            texts=(payload.get('history') or {}).get('snapshots',[])
+            archive=archives.enter_context(zipfile.ZipFile(path)) if any(s['text'] is None for s in texts) else None
             for table in TABLES:
                 added[table]=0
                 for r in (payload.get('history') or {}).get(table,[]):
@@ -564,6 +612,8 @@ def import_package(path,payload,apply_settings=True,apply_secrets=False,activate
                     # Imported reports are archival records; never resend historical failed mail.
                     if table=='reports' and item['mail_status']!='sent':item.update(mail_status='imported',next_attempt=None)
                     if table=='run_retries' and item['state'] in ('pending','queued','running'):item['state']='cancelled'
+                    if table=='snapshots' and item['text'] is None:
+                        item['text']=read_snapshot_text(archive,item)
                     keys=list(item);c.execute('INSERT INTO '+table+'('+','.join(keys)+') VALUES('+','.join('?' for k in keys)+')',[item[k] for k in keys]);added[table]+=1
             for r in payload['content_scopes']:
                 c.execute('INSERT OR IGNORE INTO state(key,value) VALUES(?,?)',(r['key'],r['value']))
