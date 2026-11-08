@@ -14,12 +14,14 @@ Web-App, Brave und Archiv laufen in Docker. Für die KI-Auswertung verbindet sic
 
 ## Ideen für eigene Projekte
 
-Der Monitor eignet sich für Seiten, die du sonst regelmäßig von Hand prüfen würdest. Gib ihm die Adresse und beschreibe im Auftrag, was dich dort interessiert.
+Für Architektur und Technische Gebäudeausrüstung (TGA) in Deutschland bieten sich die Veröffentlichungsseiten von Behörden, Netzbetreibern, Fachverbänden und Verlagen an. Im Projektauftrag legst du fest, welche Dokumente, Fachmeldungen oder Artikel der Monitor erfassen soll. So kannst du die Auswahl auf ein Bundesland, ein Gewerk oder ein bestimmtes Bauvorhaben eingrenzen.
 
-- **Termine und Fristen.** Lass dich informieren, wenn ein Kurs angekündigt wird, die Anmeldung öffnet oder sich eine Bewerbungsfrist verschiebt.
-- **Preise und Verfügbarkeit.** Beobachte den angezeigten Preis eines Produkts oder prüfe, ob es wieder lieferbar ist.
-- **Neue Beiträge und Angebote.** Sammle neue Artikel, Stellenanzeigen oder Ausschreibungen, die zu einem Thema passen.
-- **Aktualisierte Unterlagen.** Prüfe, ob ein Formular, eine Preisliste oder eine Anleitung ausgetauscht wurde, auch wenn der Downloadlink gleich bleibt.
+- **Gesetze und Bauvorschriften.** Verfolge Änderungen an Landesbauordnungen, Sonderbauverordnungen und Vorschriften zur Gebäudeenergie. Archiviere neu veröffentlichte Fassungen technischer Baubestimmungen und aktualisierte Bauantragsformulare. [Bundesrecht zur Gebäudeenergie](https://www.gesetze-im-internet.de/geg/) · [Technische Baubestimmungen beim DIBt](https://www.dibt.de/de/wir-bieten/technische-baubestimmungen)
+- **Heizung, Lüftung, Klima und Sanitär.** Erfasse neue oder überarbeitete Planungsempfehlungen zu Wärmeversorgung, Kälteanlagen, Raumlufttechnik und Trinkwasserinstallationen. [Planungsempfehlungen des AMEV](https://www.amev-online.de/amevinhalt/planen/)
+- **Elektrotechnik und Gebäudeautomation.** Beobachte neue Normausgaben und technische Hinweise zu Photovoltaik, Ladeinfrastruktur, Sicherheitsstromversorgung und Gebäudeautomation. Lass dir ausgetauschte Anschlussbedingungen oder Formulare deines Netzbetreibers melden. [Anschlussunterlagen von Stromnetz Berlin](https://www.stromnetz.berlin/partner/installateure/installateur-unterlagen/)
+- **Architektur, Brandschutz und Bauphysik.** Sammle neue Arbeitshilfen zum barrierefreien Bauen, zum Schallschutz und zur Sanierung im Bestand. Prüfe, ob Feuerwehren Merkblätter zu Feuerwehrplänen oder anderen Vorgaben des vorbeugenden Brandschutzes aktualisieren. [Leitfaden Barrierefreies Bauen des Bundes](https://www.leitfadenbarrierefreiesbauen.de/) · [Merkblätter der Berliner Feuerwehr](https://www.berliner-feuerwehr.de/ihre-sicherheit/vorbeugender-brand-und-gefahrenschutz/)
+- **BIM, Vergabe und Wettbewerbe.** Verfolge neue Ausschreibungen für Planungsleistungen, geänderte Vergabeunterlagen und neue Wettbewerbsauslobungen. Sammle überarbeitete BIM-Leitfäden und Vorlagen für Auftraggeber-Informationsanforderungen (AIA). [Muster-AIA bei BIM Deutschland](https://www.bimdeutschland.de/bim-wissen/auftraggeber-informationsanforderungen)
+- **Fachartikel und Branchenmeldungen.** Sammle auf Fachportalen, Kammerseiten und in Zeitschriftenarchiven neue Beiträge zu Themen wie Wärmepumpen im Bestand, Holzbau, Förderung oder Honorarfragen. Der Wochenbericht bündelt die Treffer mit ihren Quellenlinks. [Meldungen aus dem Bundesbau](https://www.fib-bund.de/Inhalt/Neuigkeiten/)
 
 ## Installation
 
