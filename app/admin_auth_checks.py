@@ -183,17 +183,18 @@ class LoginRoutes(unittest.TestCase):
         for path in ('/static/login.css', '/static/login.js', '/static/app-logo.png', '/favicon.ico'):
             self.assertEqual(self.client.get(path).status_code, 200)
         self.client.cookies.clear()
-        for path in ('/favicon.ico', '/static/favicon.ico?v=old'):
+        for path in ('/favicon.ico', '/static/favicon.ico?v=old', web.APP_FAVICON_URL):
             for method in ('GET', 'HEAD'):
                 with self.subTest(path=path, method=method):
                     response = self.client.request(method, path)
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.headers['content-type'], 'image/vnd.microsoft.icon')
-                    self.assertEqual(response.headers['cache-control'], 'public, max-age=86400')
+                    expected = 'public, max-age=31536000, immutable' if path == web.APP_FAVICON_URL else 'public, max-age=0, must-revalidate'
+                    self.assertEqual(response.headers['cache-control'], expected)
                     self.assertNotIn('set-cookie', response.headers)
                     self.assertEqual(response.headers['x-content-type-options'], 'nosniff')
         login = self.client.get('/login')
-        self.assertIn('href="/favicon.ico"', login.text)
+        self.assertIn(f'href="{web.APP_FAVICON_URL}"', login.text)
         self.assertEqual(login.headers['cache-control'], 'no-store')
         self.assertEqual(self.client.get('/static/login.css').headers['cache-control'], 'no-store')
 

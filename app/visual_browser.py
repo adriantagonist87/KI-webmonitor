@@ -6,7 +6,7 @@ intercept requests, modify form values or submit forms. Passwords stay local.
 import asyncio
 import re
 import time
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 from native_input import NativeInput, endpoint
 from site_login import GenericFormLogin, LoginError
 from browser_actions import UNSAFE_LABEL, NAVIGATION_CONTAINERS, DISMISS_LABELS, _matching_controls, safe_navigation_url
@@ -171,11 +171,36 @@ class Desktop:
                 'at_start':after['after']<=1,'at_end':after['after']+after['client_height']>=after['scroll_height']-2}
 
 
+def approved_login_action(actual, configured, project_url):
+    if actual == configured:
+        return True
+    # Some SSO forms change only the return URL when the library is opened
+    # from another entry point. The POST endpoint and every other parameter
+    # must match, and the new return URL may only be the exact project URL.
+    try:
+        action, saved, target = map(urlsplit, (actual, configured, project_url))
+        if (action._replace(query='') != saved._replace(query='') or action.fragment
+                or target.scheme != saved.scheme or target.netloc != saved.netloc
+                or target.fragment or target.username or target.password):
+            return False
+        query = parse_qsl(action.query, keep_blank_values=True, strict_parsing=True)
+        previous = parse_qsl(saved.query, keep_blank_values=True, strict_parsing=True)
+        returns = [value for key, value in query if key == 'return_url']
+        return (sum(key == 'return_url' for key, _ in previous) == 1
+                and len(returns) == 1
+                and urlsplit(returns[0]) == target
+                and [(key, value) for key, value in query if key != 'return_url']
+                == [(key, value) for key, value in previous if key != 'return_url'])
+    except ValueError:
+        return False
+
+
 class VisualLogin(GenericFormLogin):
     def __init__(self, context, project_url, secret, config, desktop, log):
         super().__init__(context,project_url,secret,config,log)
         self.desktop = desktop
         self.page = desktop.page
+        self.submit_url = config["submit_url"]
 
     async def _field_focused(self, field, key):
         return await field.evaluate('''(e, check) => {
@@ -184,7 +209,7 @@ class VisualLogin(GenericFormLogin):
                 && e instanceof HTMLInputElement && !e.matches(':disabled') && !e.readOnly
                 && e.form?.action === check.submit && e.form.method.toLowerCase() === 'post'
                 && (check.password ? e.type === 'password' : ['text', 'email', 'tel', 'number'].includes(e.type));
-        }''', {'origin': self.policy.origin, 'submit': self.config['submit_url'],
+        }''', {'origin': self.policy.origin, 'submit': self.submit_url,
               'password': key == 'password'}, timeout=1500)
 
     async def _focus_field(self, field, key, check_target):
@@ -232,8 +257,10 @@ class VisualLogin(GenericFormLogin):
         if await form.count()!=1 or not await form.is_visible():
             raise LoginError('Keine eindeutige sichtbare Anmeldemaske; keine direkte SSO-URL wird aufgerufen.')
         spec=await form.evaluate('e=>({action:e.action,method:e.method,fields:[...e.elements].filter(x=>!["hidden","submit","button","checkbox","radio"].includes(x.type)).map(x=>({name:x.name,type:x.type}))})')
-        if spec['action']!=self.config['submit_url'] or spec['method'].lower()!='post' or len(spec['fields'])!=2:
+        if (not approved_login_action(spec['action'], self.config['submit_url'], self.target)
+                or spec['method'].lower() != 'post' or len(spec['fields']) != 2):
             raise LoginError('Sichtbares Formular entspricht nicht dem freigegebenen Webseitenzugang.')
+        self.submit_url = spec['action']
         user=form.locator(self.config['username_selector']);password=form.locator(self.config['password_selector']);submit=form.locator(self.config['submit_selector'])
         for field in (user,password,submit):
             if await field.count()!=1 or not await field.is_visible(): raise LoginError('Anmeldefelder nicht eindeutig sichtbar.')
@@ -241,7 +268,7 @@ class VisualLogin(GenericFormLogin):
             raise LoginError('Kein bestätigter Anmeldeknopf.')
         async def check_target():
             spec=await submit.evaluate('e=>({action:e.hasAttribute("formaction")?e.formAction:e.form.action,method:e.hasAttribute("formmethod")?e.formMethod:e.form.method})')
-            if self._origin(page.url)!=self.policy.origin or spec['action']!=self.config['submit_url'] or spec['method'].lower()!='post':
+            if self._origin(page.url)!=self.policy.origin or spec['action']!=self.submit_url or spec['method'].lower()!='post':
                 raise LoginError('Anmeldeziel hat sich geändert.')
             if await password.get_attribute('type')!='password':
                 raise LoginError('Kein geschütztes Passwortfeld.')

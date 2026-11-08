@@ -1,5 +1,5 @@
 {% macro icon(name, extra='') -%}<svg class="icon {{extra}}" aria-hidden="true"><use href="#i-{{name}}"></use></svg>{%- endmacro %}
-{% macro app_favicon() -%}<link rel="icon" type="image/vnd.microsoft.icon" sizes="16x16 32x32 48x48 64x64 128x128 256x256" href="/favicon.ico">{%- endmacro %}
+{% macro app_favicon() -%}<link rel="icon" type="image/vnd.microsoft.icon" sizes="16x16 32x32 48x48 64x64 128x128 256x256" href="{{ app_favicon_url }}">{%- endmacro %}
 {% macro project_favicon(src) -%}
 {% if src %}<img class="project-favicon" src="{{src}}" alt="" loading="lazy">{% else %}<span class="favicon-placeholder" aria-hidden="true">{{icon('globe')}}</span>{% endif %}
 {%- endmacro %}

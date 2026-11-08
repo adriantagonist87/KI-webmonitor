@@ -49,6 +49,7 @@ import retry_jobs
 import browser_mode
 import notifications
 import github_releases
+import obsidian_changelog
 import dke_standards
 from collection_scan import scan_collection
 from browser_actions import dismiss_notice, activate_navigation, scroll_region, dismiss_cookie_banner
@@ -800,6 +801,8 @@ async def monitor(project, rid):
     if shutil.disk_usage(DATA).free<1024*1024*1024: raise RuntimeError('Weniger als 1 GB freier Archivspeicher')
     if dke_standards.matches(project['url']):
         return await dke_standards.monitor(project, rid)
+    if obsidian_changelog.matches(project['url']):
+        return await obsidian_changelog.monitor(project, rid, llm, s.get('analysis_model'), redact_text)
     repo = github_releases.repository(project['url'])
     if repo:
         if github_releases.API_HOST not in domains:

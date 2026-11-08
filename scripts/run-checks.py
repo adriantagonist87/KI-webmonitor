@@ -57,6 +57,7 @@ SUITES = {
     'distribution_checks': 36,
     'document_names_checks': 12,
     'github_releases_checks': 4,
+    'obsidian_changelog_checks': 3,
     'dke_standards_checks': 6,
 }
 

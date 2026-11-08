@@ -71,14 +71,18 @@ PUBLIC_URL = lan_access.public_origin(os.environ.get('KIWM_PUBLIC_URL'))
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=['localhost', '127.0.0.1', 'app', 'testserver']
                    + ([urlsplit(LAN_URL).hostname] if LAN_URL else [])
                    + ([urlsplit(PUBLIC_URL).hostname] if PUBLIC_URL else []))
-FAVICON_PATHS = {'/favicon.ico', '/static/favicon.ico'}
+FAVICON_FILE = Path(__file__).parent / 'static/favicon.ico'
+APP_FAVICON_URL = '/favicon-' + digest(FAVICON_FILE.read_bytes())[:12] + '.ico'
+FAVICON_PATHS = {'/favicon.ico', '/static/favicon.ico', APP_FAVICON_URL}
 
 
+@app.api_route(APP_FAVICON_URL, methods=['GET', 'HEAD'], include_in_schema=False)
 @app.api_route('/favicon.ico', methods=['GET', 'HEAD'], include_in_schema=False)
 async def app_favicon():
-    return FileResponse(Path(__file__).parent / 'static/favicon.ico', media_type='image/vnd.microsoft.icon')
+    return FileResponse(FAVICON_FILE, media_type='image/vnd.microsoft.icon')
 
 env = Environment(loader=FileSystemLoader('/app/templates'), autoescape=select_autoescape(['html']))
+env.globals['app_favicon_url'] = APP_FAVICON_URL
 env.filters['markdown'] = render_report
 
 STATUS_LABELS = {'queued':'Wartet','running':'Läuft','success':'Erfolgreich','partial':'Unvollständig','failed':'Fehler','cancelled':'Abgebrochen','protection':'Bot-Schutz'}
@@ -175,7 +179,7 @@ async def protect(request, call_next):
     auth = admin_auth.current()
     request.state.admin_username = ''
     request.state.auth_enabled = auth.enabled
-    public = request.url.path in ('/login', '/auth/check', '/health', '/favicon.ico') or request.url.path.startswith('/static/')
+    public = request.url.path in ('/login', '/auth/check', '/health') or request.url.path in FAVICON_PATHS or request.url.path.startswith('/static/')
     if not public:
         if auth.error or (not auth.enabled and (lan_access.is_lan_request(request, LAN_URL) or public_request)):
             return secure_response(request, login_page(request, 'Administratorzugang ist noch nicht eingerichtet.', 503))
@@ -236,7 +240,11 @@ def secure_response(request, response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers.setdefault('X-Frame-Options', 'DENY')
     response.headers['Referrer-Policy'] = 'same-origin'
-    response.headers['Cache-Control'] = 'public, max-age=86400' if public_icon else 'no-store'
+    if public_icon:
+        response.headers['Cache-Control'] = ('public, max-age=31536000, immutable'
+                                             if request.url.path == APP_FAVICON_URL else 'public, max-age=0, must-revalidate')
+    else:
+        response.headers['Cache-Control'] = 'no-store'
     response.headers.setdefault('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; frame-ancestors 'none'; form-action 'self'; base-uri 'none'")
     return response
 
