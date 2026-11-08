@@ -1,23 +1,25 @@
-# KI-Webmonitor
+<p align="center">
+  <img src="app/static/app-logo.png" width="112" alt="Logo des KI-Webmonitors">
+</p>
+<h1 align="center">KI-Webmonitor</h1>
+<p align="center"><strong>Webseiten und Dokumente im Blick behalten</strong></p>
 
-Der KI-Webmonitor prüft regelmäßig Webseiten und ihre verlinkten Dateien. Er meldet zum Beispiel, wenn eine Behörde ein Merkblatt austauscht, eine neue Normausgabe erscheint oder ein Softwareprojekt eine stabile Version veröffentlicht. Im Dashboard stehen die Änderungen mit Quellenlink und Prüfverlauf. Die Originaldateien bleiben im Archiv verfügbar, solange die eingestellte Aufbewahrung sie vorhält.
+Der KI-Webmonitor prüft Webseiten und verlinkte Dateien nach einem Zeitplan. Du legst für jedes Projekt fest, welche Bereiche er prüfen und welche Änderungen er melden soll. Im Dashboard findest du die Ergebnisse mit Quellenlink und Prüfverlauf. Heruntergeladene Dateifassungen stehen im Archiv zum Vergleich bereit.
 
-Die Anwendung ist für die Arbeit mit Bauvorschriften, Normen und Fachinformationen entstanden. Eigene Projekte lassen sich über die Weboberfläche für andere Themen einrichten. Web-App, Brave und Archiv laufen in Docker. Für die KI-Auswertung verbindet sich der Stack mit einem selbst betriebenen oMLX-Server über dessen OpenAI-kompatible API.
+Web-App, Brave und Archiv laufen in Docker. Für die KI-Auswertung verbindet sich der Stack mit einem selbst betriebenen oMLX-Server über dessen OpenAI-kompatible API.
 
 ![Projektübersicht mit DKE, VDE, elektro.net und weiteren Projekten aus der Gruppe Arbeit](docs/screenshots/dashboard.png)
 
 *Die Screenshots zeigen die App mit ausgewählten Arbeitsprojekten und Beispieldaten.*
 
-## Was lässt sich überwachen?
+## Ideen für eigene Projekte
 
-| Anwendungsfall | Beispiel | Was der Monitor prüft |
-| --- | --- | --- |
-| Behörden und Fachportale | Berliner Bauaufsicht, Berliner Feuerwehr, BIM Berlin | Relevante Texte, neue Links und Änderungen an herunterladbaren Anlagen, auch in ausklappbaren Bereichen |
-| Normen und Vornormen | DKE-Arbeitsergebnisse | Nationale Normausgaben anhand von Normnummer und Ausgabestand. Die Kennzeichnung `VDE V` erscheint als **Vornorm**. |
-| Inhalte mit Anmeldung | VDE-Normenbibliothek, elektro.net | Freigegebene Inhalte im Brave-Profil, beispielsweise Normenlisten oder Fachartikel |
-| Software-Releases | Öffentliche GitHub-Releases | Neue stabile Versionen und die in den Release Notes genannten Neuerungen. Vorabversionen werden ausgefiltert. |
+Der Monitor eignet sich für Seiten, die du sonst regelmäßig von Hand prüfen würdest. Gib ihm die Adresse und beschreibe im Auftrag, was dich dort interessiert.
 
-Für übliche Webseiten genügen eine Startadresse und ein Auftrag. DKE und GitHub Releases verwenden zusätzlich strukturierte öffentliche Quellen. Beim DKE-Abruf ergänzt ein Quartalsabgleich die Monatsliste. Die Identität einer Normausgabe bleibt auch über den Monatswechsel hinweg gespeichert.
+- **Termine und Fristen.** Lass dich informieren, wenn ein Kurs angekündigt wird, die Anmeldung öffnet oder sich eine Bewerbungsfrist verschiebt.
+- **Preise und Verfügbarkeit.** Beobachte den angezeigten Preis eines Produkts oder prüfe, ob es wieder lieferbar ist.
+- **Neue Beiträge und Angebote.** Sammle neue Artikel, Stellenanzeigen oder Ausschreibungen, die zu einem Thema passen.
+- **Aktualisierte Unterlagen.** Prüfe, ob ein Formular, eine Preisliste oder eine Anleitung ausgetauscht wurde, auch wenn der Downloadlink gleich bleibt.
 
 ## Schnellstart in Portainer
 
