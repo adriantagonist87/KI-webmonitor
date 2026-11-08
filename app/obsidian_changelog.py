@@ -96,28 +96,39 @@ def decode_batch(response, expected):
     for item in items:
         text = item['text']
         if text is not None and (not isinstance(text, str) or not text.strip()
-                                 or len(text) > 2200 or re.search(r'https?://|[<>\r\n]', text, re.I)):
+                                 or len(text) > 2200 or re.search(r'https?://|[\r\n]', text, re.I)):
             raise ValueError('Ungültige Übersetzung.')
     return [item['text'].strip() for item in items if item['text']]
+
+
+async def translate_batch(batch, llm, model, redact):
+    expected = [block['id'] for block in batch]
+    messages = [{'role': 'system', 'content': PROMPT},
+                {'role': 'user', 'content': redact(json.dumps(batch, ensure_ascii=False))}]
+    for attempt in range(2):
+        try:
+            response = await asyncio.wait_for(llm(messages, model, max_tokens=3200, temperature=0,
+                                                  chat_template_kwargs={'enable_thinking': False}), timeout=90)
+            return decode_batch(response, expected)
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+            if len(batch) > 1:
+                # A malformed combined answer must not omit any source block.
+                mid = len(batch) // 2
+                first = await translate_batch(batch[:mid], llm, model, redact)
+                return first + await translate_batch(batch[mid:], llm, model, redact)
+        except (RuntimeError, TimeoutError, httpx.HTTPError):
+            pass
+        if attempt == 0:
+            messages.append({'role': 'user', 'content': 'Die erwarteten numerischen IDs sind ' + str(expected) +
+                             '. Gib für jede davon genau ein gültiges JSON-Objekt aus.'})
+    raise RuntimeError('Die KI konnte den Obsidian-Changelog nicht vollständig übersetzen.')
 
 
 async def translate(release, public_urls, llm, model, redact):
     blocks, references = source_blocks(release, public_urls)
     features = []
     for start in range(0, len(blocks), 8):
-        batch = blocks[start:start + 8]
-        messages = [{'role': 'system', 'content': PROMPT},
-                    {'role': 'user', 'content': redact(json.dumps(batch, ensure_ascii=False))}]
-        for attempt in range(2):
-            try:
-                response = await asyncio.wait_for(llm(messages, model, max_tokens=3200, temperature=0,
-                                                      chat_template_kwargs={'enable_thinking': False}), timeout=90)
-                features.extend(decode_batch(response, [block['id'] for block in batch]))
-                break
-            except (ValueError, TypeError, KeyError, IndexError, AttributeError, RuntimeError, TimeoutError, httpx.HTTPError):
-                if attempt:
-                    raise RuntimeError('Die KI konnte den Obsidian-Changelog nicht vollständig übersetzen.') from None
-                messages.append({'role': 'user', 'content': 'Alle ids in derselben Reihenfolge mit genau einem JSON-Eintrag ausgeben.'})
+        features.extend(await translate_batch(blocks[start:start + 8], llm, model, redact))
     return list(dict.fromkeys(redact(text) for text in features)), references
 
 

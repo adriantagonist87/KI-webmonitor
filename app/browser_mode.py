@@ -8,7 +8,7 @@ DEFAULT = {'mode': 'standard', 'entry_url': ''}
 
 
 def validate(value, project):
-    if not isinstance(value, dict) or set(value) != {'mode', 'entry_url'} or value['mode'] not in ('standard', 'visual'):
+    if not isinstance(value, dict) or set(value) != {'mode', 'entry_url'} or value['mode'] not in ('standard', 'visual', 'visual_mobile'):
         raise ValueError('Ungültige Browserbedienung.')
     entry = value['entry_url']
     if not isinstance(entry, str) or len(entry) > 2048:

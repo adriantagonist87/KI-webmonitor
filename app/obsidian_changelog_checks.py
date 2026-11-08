@@ -35,6 +35,16 @@ class ObsidianChecks(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result), 13)
         self.assertEqual(llm.await_count, 2)
         self.assertEqual(refs, [])
+        def sometimes_invalid(messages, *args, **kwargs):
+            if len(json.loads(messages[1]['content'])) > 1:
+                return {'choices': [{'message': {'content': '{"items":'}}]}
+            return model(messages, *args, **kwargs)
+
+        sometimes_async = AsyncMock(side_effect=sometimes_invalid)
+        result, _ = await obsidian.translate({'html': '<p>First</p><p>Second</p>'}, set(),
+                                            sometimes_async, 'model', lambda value: value)
+        self.assertEqual(result, ['Funktion 1', 'Funktion 2'])
+        self.assertEqual(sometimes_async.await_count, 3)
         with self.assertRaises(ValueError):
             obsidian.decode_batch(model([{}, {'content': '[{"id":1}]'}]), [1, 2])
 

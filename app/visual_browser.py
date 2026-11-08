@@ -16,6 +16,38 @@ _DANGER = UNSAFE_LABEL
 _SAFE_BUTTON = re.compile(r'(?i)^(filter einblenden|filter ausblenden|menü.*|menu.*|schließen|schliessen|close|verstanden|ok|×|✕|x|alle akzeptieren|alle ablehnen|nur notwendige.*|zustimmen|ablehnen)$')
 
 
+async def mobile_window(browser, context):
+    """Open a temporary narrow Brave window without changing UA or the main window."""
+    session = await browser.new_browser_cdp_session()
+    target_id = None
+    try:
+        async with context.expect_page(timeout=10000) as opened:
+            target = await session.send('Target.createTarget', {
+                'url': 'about:blank', 'newWindow': True, 'left': 20, 'top': 20,
+                'width': 460, 'height': 900,
+            })
+            target_id = target['targetId']
+        page = await opened.value
+        page_session = await context.new_cdp_session(page)
+        try:
+            info = await page_session.send('Target.getTargetInfo')
+            if info['targetInfo']['targetId'] != target_id:
+                raise RuntimeError('Schmales Brave-Fenster konnte nicht eindeutig zugeordnet werden.')
+        finally:
+            await page_session.detach()
+        bounds = await session.send('Browser.getWindowForTarget', {'targetId': target_id})
+        await session.send('Browser.setWindowBounds', {'windowId': bounds['windowId'],
+                           'bounds': {'left': 20, 'top': 20, 'width': 460, 'height': 900}})
+        await page.wait_for_function('innerWidth <= 600 && innerWidth < innerHeight', timeout=8000)
+        return page
+    except BaseException:
+        if target_id:
+            await session.send('Target.closeTarget', {'targetId': target_id})
+        raise
+    finally:
+        await session.detach()
+
+
 class Desktop:
     def __init__(self, page, cdp_url, allowed):
         self.page, self.allowed = page, allowed

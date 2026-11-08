@@ -1,5 +1,6 @@
-Release: 1.5.15
+Release: 1.5.16
 Stand: 2026-11-08
+1.5.16: Schmales Brave-Fenster zur Erprobung und robuste Obsidian-Übersetzung.
 1.5.15: Versioniertes Browser-Icon, robusterer visueller Login und öffentlicher Obsidian-Changelog.
 1.5.14: Einheitlicher blau akzentuierter Schriftzug in App, Wochenbericht und GitHub-README.
 1.5.13: Transparentes Monster-Logo in App und Berichten, neues Favicon in sechs Größen.

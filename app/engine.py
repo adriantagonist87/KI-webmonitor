@@ -822,9 +822,13 @@ async def monitor(project, rid):
         browser=await pw.chromium.connect_over_cdp(browser_endpoint.resolve(BROWSER_CDP_URL))
         ctx=browser.contexts[0]; old_pages=list(ctx.pages)
         visual_config=browser_mode.get(project)
-        visual_mode=visual_config['mode']=='visual'
+        mobile_mode=visual_config['mode']=='visual_mobile'
+        visual_mode=visual_config['mode'] in ('visual', 'visual_mobile')
         desktop=None
-        if visual_mode:
+        if mobile_mode:
+            from visual_browser import mobile_window
+            page=await mobile_window(browser,ctx)
+        elif visual_mode:
             # Keep an already authenticated tab, including its sessionStorage.
             matching=[p for p in old_pages if urlsplit(p.url).hostname==urlsplit(project['url']).hostname]
             page=matching[-1] if matching else await ctx.new_page()
@@ -868,7 +872,8 @@ async def monitor(project, rid):
                 # Refresh through the normal entry point once per run. Reusing
                 # cookies/tab must never mistake a stale DOM for a fresh check.
                 await desktop.goto(visual_config['entry_url'] or project['url'],force=True)
-                event(rid,'Visuelle Desktopbedienung aktiv; vorhandene Tabs und Browser-Cache bleiben erhalten.')
+                event(rid,'Visuelle Bedienung im schmalen Brave-Fenster.' if mobile_mode else
+                      'Visuelle Desktopbedienung aktiv; vorhandene Tabs und Browser-Cache bleiben erhalten.')
             if broker:
                 event(rid,'Webseitenzugang wird geprüft.')
                 await broker.ensure()
@@ -1306,7 +1311,12 @@ async def monitor(project, rid):
             try:
                 if not visual_mode:await ctx.unroute('**/*',guard)
                 if desktop:await desktop.__aexit__(None,None,None)
-            finally:await browser.close()
+            finally:
+                try:
+                    if mobile_mode and not page.is_closed():
+                        await page.close()
+                finally:
+                    await browser.close()
 
 
 

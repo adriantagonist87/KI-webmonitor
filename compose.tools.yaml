@@ -2,7 +2,7 @@
 # Erst app und browser stoppen. Siehe docs/OPERATIONS.md.
 services:
   backup:
-    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.15}
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.16}
     profiles: [tools]
     user: '1000:1000'
     read_only: true
@@ -17,7 +17,7 @@ services:
       - ${KIWM_SECRETS:-secrets}:/source/secrets:ro
       - ${KIWM_BROWSER_DATA:-browser-data}:/source/browser:ro
   restore:
-    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.15}
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.16}
     profiles: [tools]
     user: '1000:1000'
     read_only: true
