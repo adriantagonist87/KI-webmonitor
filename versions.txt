@@ -1,5 +1,6 @@
-Release: 1.5.12
-Gepruefter Stand: 2026-11-07
+Release: 1.5.13
+Stand: 2026-11-08
+1.5.13: Transparentes Monster-Logo in App und Berichten, neues Favicon in sechs Größen.
 1.5.12: VDE-Vornormen in DKE-Archiv, Auswertung und Berichten gekennzeichnet.
 1.5.11: Nationale DKE-Normausgaben mit Monats- und Quartalsabgleich.
 1.5.10: Dashboard mit Fehlern zuerst und Sortierung nach Prüfung, Änderung oder Name.

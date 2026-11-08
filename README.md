@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/static/app-logo.png" width="112" alt="Logo des KI-Webmonitors">
+  <img src="app/static/app-logo.png" width="112" alt="Blaues Monster mit einem Auge, das Logo des KI-Webmonitors">
 </p>
 <h1 align="center">KI-Webmonitor</h1>
 <p align="center"><strong>Webseiten und Dokumente im Blick behalten</strong></p>

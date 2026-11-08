@@ -10,10 +10,10 @@ brave.svg
   Official brand resources: https://brave.com/brave-branding-assets/
 
 app-logo.png
-  Transparent cutout derived from the user-supplied logo, 2026-11-06.
-  Exterior white background removed using image generation/editing; white eye retained.
-  Original input SHA-256: ee4b688aa01ae6bdea8712fd7f933338d4f51287617df79b3c646dd40b4fa442
-  Current PNG SHA-256: 4eb80d0b5aeb4f6fd6aa86f8e3e3cf9c927c771893533729b287922e5cb0b5e9
+  Front-facing blue monster from user-provided artwork, 2026-11-08.
+  ImageGen cutout with transparent exterior and white eye retained.
+  Original input SHA-256: cdd45a32bb34a37837398e3a58d8dab209ca3ab86ece10420d117bbe73f8da37
+  Current PNG SHA-256: 501a6956fd304cbbd5162c29ac473dda0b47a4833c74cdfd78e04062f4133811
 
 favicon.ico
   Size/format derivative of app-logo.png for browser icons.

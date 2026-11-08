@@ -2,7 +2,7 @@
 {% from 'macros.html' import app_favicon %}
 <html lang="de" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>Anmelden · KI-Webmonitor</title>{{app_favicon()}}<link rel="stylesheet" href="/static/ui.css?v=20261107-login"><link rel="stylesheet" href="/static/login.css?v=2"><script src="/static/login.js?v=1" defer></script></head>
 <body class="page-login"><main class="login-shell"><section class="login-card" aria-labelledby="login-title">
-<div class="login-identity"><img class="login-logo" src="/static/app-logo.png" alt="" width="106" height="120"><div class="login-wordmark"><p class="login-brand"><span>KI-</span>Webmonitor</p><p class="login-tagline">Webseiten überwachen · Änderungen erkennen · Automatisch informiert bleiben</p></div></div><h1 id="login-title">Anmelden</h1>
+<div class="login-identity"><img class="login-logo" src="/static/app-logo.png?v=501a6956fd30" alt="" width="106" height="120"><div class="login-wordmark"><p class="login-brand"><span>KI-</span>Webmonitor</p><p class="login-tagline">Webseiten überwachen · Änderungen erkennen · Automatisch informiert bleiben</p></div></div><h1 id="login-title">Anmelden</h1>
 {% if error %}<div class="login-error" role="alert">{{error}}</div>{% endif %}
 <form method="post" action="/login" data-login-form>
 <input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="next" value="{{next_url}}">
