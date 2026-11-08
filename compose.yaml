@@ -40,7 +40,7 @@ services:
   # 1. Anwendung · Projekte, Zeitpläne, Berichte und Dateivergleich
   app:
     <<: *betrieb
-    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.17}
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.18}
     user: '1000:1000'
     init: true
     stop_grace_period: 60s
@@ -69,7 +69,7 @@ services:
   # Digitaler Text von Seite eins. Nur Unix-Socket, keine Archiv- oder Secret-Mounts.
   page-reader:
     <<: *betrieb
-    image: ${IMAGE_PREFIX:-ki-webmonitor}-page-reader:${VERSION:-1.5.17}
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-page-reader:${VERSION:-1.5.18}
     user: '1000:1000'
     init: true
     network_mode: none
@@ -82,7 +82,7 @@ services:
   # 2. Brave · grafischer Browser mit dauerhaftem Profil
   browser:
     <<: *betrieb
-    image: ${IMAGE_PREFIX:-ki-webmonitor}-browser:${VERSION:-1.5.17}
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-browser:${VERSION:-1.5.18}
     user: '1000:1000'
     init: true
     stop_grace_period: 30s
@@ -98,7 +98,7 @@ services:
   # 3. Internetfilter · sperrt private Netzadressen für den Browser
   proxy:
     <<: *betrieb
-    image: ${IMAGE_PREFIX:-ki-webmonitor}-proxy:${VERSION:-1.5.17}
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-proxy:${VERSION:-1.5.18}
     user: proxy
     init: true
     mem_limit: 256m
@@ -108,7 +108,7 @@ services:
   # 4. Verbindung zum lokalen KI-Server und zum konfigurierten SMTP-Server
   gateway:
     <<: *betrieb
-    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.17}
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.18}
     user: '1000:1000'
     init: true
     mem_limit: 384m
@@ -125,7 +125,7 @@ services:
   # 5. Geschützter Zugang · Anwendung 8765, Brave 8766 (per SSH-Tunnel)
   ingress:
     <<: *betrieb
-    image: ${IMAGE_PREFIX:-ki-webmonitor}-ingress:${VERSION:-1.5.17}
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-ingress:${VERSION:-1.5.18}
     user: '101:101'
     mem_limit: 128m
     tmpfs: ['/tmp:size=32m,uid=101,gid=101']

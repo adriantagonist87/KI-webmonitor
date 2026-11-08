@@ -80,7 +80,8 @@ class Enhancements(unittest.TestCase):
   icon=icons.record(SVG);icons.save('alpha',icon)
   for history in (False,True):
    self.select('source');path=self.base/('archive.zip' if history else 'config.json');transfer.export_to(path,history=history);p=transfer.read_package(path)
-   self.assertEqual(p['version'],transfer.VERSION);self.assertEqual(p['project_icons']['alpha'],icon)
+   self.assertEqual(p['version'],transfer.VERSION if history else transfer.CONFIG_VERSION)
+   self.assertEqual(p['project_icons']['alpha'],icon)
    self.select('dest'+str(history));transfer.import_package(path,p);self.assertEqual(icons.get('alpha'),icon)
  def test_09_tampered_icon_import_rejected(self):
   icons.save('alpha',icons.record(SVG));path=self.base/'config.json';p=transfer.export_to(path)

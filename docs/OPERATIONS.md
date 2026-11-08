@@ -25,10 +25,10 @@ Vergleichsstand werden im nächsten Lauf neu erfasst. SQLite verwendet die
 freigewordenen Datenbankseiten für neue Einträge.
 
 Vor einer endgültigen Löschung kann unter **Export / Import** ein ZIP mit
-Verlauf gespeichert werden. Seit 1.5.17 werden die Seitentexte darin als
+Verlauf gespeichert werden. Seit 1.5.18 werden die Seitentexte darin als
 separate ZIP-Einträge geschrieben. Der einfache JSON-Export ist weiterhin
 mit Version 8 des Transferformats kompatibel. Für einen ZIP-Import im neuen
-Format 9 mindestens App-Version 1.5.17 verwenden. Bei einem Rechtefehler
+Format 9 mindestens App-Version 1.5.18 verwenden. Bei einem Rechtefehler
 die Eigentümerschaft der betroffenen Archivdatei für den App-Benutzer
 (UID 1000) prüfen.
 
