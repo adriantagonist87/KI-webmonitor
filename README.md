@@ -8,7 +8,7 @@ Der KI-Webmonitor prüft Webseiten und verlinkte Dateien nach einem Zeitplan. Du
 
 Web-App, Brave und Archiv laufen in Docker. Für die KI-Auswertung verbindet sich der Stack mit einem selbst betriebenen oMLX-Server über dessen OpenAI-kompatible API.
 
-![Projektübersicht mit DKE, VDE, elektro.net und weiteren Projekten aus der Gruppe Arbeit](docs/screenshots/dashboard.png)
+![Projektübersicht mit Favicons für DKE, VDE, elektro.net und weitere Projekte aus der Gruppe Arbeit](docs/screenshots/dashboard.png)
 
 *Die Screenshots zeigen die App mit ausgewählten Arbeitsprojekten und Beispieldaten.*
 
@@ -64,7 +64,7 @@ Bei PDF-, Word- und Excel-Dateien lädt der Monitor die Originaldatei und berech
 
 Das **Globale Dateiverzeichnis** bietet Suche und Sortierung über Projekte hinweg, einzelne Downloads und einen ZIP-Download mit einem Ordner je Projekt. Der separate Dokumentname kann aus dem digitalen Text der ersten Seite ermittelt werden. Diese Titelermittlung ist vom Hashvergleich getrennt und erfolgt ohne OCR. Aus einer geänderten Datei leitet die App keine Aussage über geänderte fachliche Inhalte ab.
 
-![Dateiverzeichnis mit Projekt, Dateityp, Dokumenttitel, Originaldateiname und Download](docs/screenshots/dateiverzeichnis.png)
+![Dateiverzeichnis mit Projekt-Favicons, Dateityp, Dokumenttitel, Originaldateiname und Download](docs/screenshots/dateiverzeichnis.png)
 
 ## Benachrichtigungen und Wochenberichte
 
@@ -72,7 +72,7 @@ Das **Globale Dateiverzeichnis** bietet Suche und Sortierung über Projekte hinw
 - **E-Mail** liefert einen HTML-Wochenbericht mit Textalternative. Der Bericht entsteht montags um 08:00 Uhr in der Zeitzone `Europe/Berlin`. SMTP, Verbindungstest und Testmail lassen sich in der App einrichten. Vorschauen können ohne produktiven Versand erstellt werden.
 - **Verteilerlisten** beschränken Empfängerberichte auf ausgewählte Projekte oder Tags. Empfänger sehen relevante Änderungen und unveränderte Quellen, jeweils mit Originalquellen. Adminhinweise und interne Webmonitor-Links bleiben im Adminbericht. Die Adminansicht archiviert Berichte und Versandstatus chronologisch.
 
-![Wochenbericht für den Tag Arbeit als geöffnete E-Mail im Stil von Outlook 2024](docs/screenshots/wochenbericht.png)
+![Wochenbericht für den Tag Arbeit mit Favicons der Quellen in einer geöffneten E-Mail im Stil von Outlook 2024](docs/screenshots/wochenbericht.png)
 
 *Nachgestelltes Outlook-2024-Fenster mit Beispieladressen.*
 
