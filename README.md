@@ -70,7 +70,9 @@ Das **Globale Dateiverzeichnis** bietet Suche und Sortierung über Projekte hinw
 - **E-Mail** liefert einen HTML-Wochenbericht mit Textalternative. Der Bericht entsteht montags um 08:00 Uhr in der Zeitzone `Europe/Berlin`. SMTP, Verbindungstest und Testmail lassen sich in der App einrichten. Vorschauen können ohne produktiven Versand erstellt werden.
 - **Verteilerlisten** beschränken Empfängerberichte auf ausgewählte Projekte oder Tags. Empfänger sehen relevante Änderungen und unveränderte Quellen, jeweils mit Originalquellen. Adminhinweise und interne Webmonitor-Links bleiben im Adminbericht. Die Adminansicht archiviert Berichte und Versandstatus chronologisch.
 
-![HTML-Vorschau eines Wochenberichts für den Tag Arbeit](docs/screenshots/wochenbericht.png)
+![Wochenbericht für den Tag Arbeit als geöffnete E-Mail im Stil von Outlook 2024](docs/screenshots/wochenbericht.png)
+
+*Nachgestelltes Outlook-2024-Fenster mit Beispieladressen.*
 
 [Telegram und SMTP](docs/KOMMUNIKATION.md) · [Verteiler und Versandprotokoll](docs/VERTEILER.md)
 
