@@ -1,7 +1,12 @@
 <p align="center">
   <img src="app/static/app-logo.png" width="112" alt="Blaues Monster mit einem Auge, das Logo des KI-Webmonitors">
 </p>
-<h1 align="center">KI-Webmonitor</h1>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/wordmark-dark.svg">
+    <img src="docs/wordmark.svg" width="344" alt="KI-Webmonitor">
+  </picture>
+</h1>
 <p align="center"><strong>Webseiten und Dokumente im Blick behalten</strong></p>
 
 Der kostenlose KI-Webmonitor prüft Webseiten und verlinkte Dateien nach einem festgelegten Zeitplan. Du legst für jedes Projekt fest, welche Bereiche er prüfen und welche Änderungen er melden soll. Im Dashboard findest du die Ergebnisse mit Quellenlink und Prüfverlauf. Heruntergeladene Dateifassungen stehen im Archiv zum Vergleich bereit.

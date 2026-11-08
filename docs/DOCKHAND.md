@@ -1,6 +1,6 @@
 # Installation mit Dockhand
 
-[Dockhand](https://github.com/Finsys/dockhand) verwaltet den KI-Webmonitor als Docker-Compose-Stack. Die Anleitung setzt voraus, dass Dockhand läuft und der Linux-Docker-Host mit `amd64` als Environment verbunden ist. Die Images für `1.5.13` sind öffentlich abrufbar.
+[Dockhand](https://github.com/Finsys/dockhand) verwaltet den KI-Webmonitor als Docker-Compose-Stack. Die Anleitung setzt voraus, dass Dockhand läuft und der Linux-Docker-Host mit `amd64` als Environment verbunden ist. Die Images für `1.5.14` sind öffentlich abrufbar.
 
 ## Stack aus Git anlegen
 
@@ -17,7 +17,7 @@ Die Git-Optionen und die Variablenverwaltung sind im [Dockhand-Handbuch](https:/
 | Name | Wert |
 | --- | --- |
 | `IMAGE_PREFIX` | `ghcr.io/adriantagonist87/ai-webmonitor` |
-| `VERSION` | `1.5.13` |
+| `VERSION` | `1.5.14` |
 | `KIWM_ADMIN_USERNAME` | Eigener Adminname |
 | `KIWM_ADMIN_PASSWORD` | Eigenes Passwort mit mindestens zwölf Zeichen. In Dockhand als **Secret** markieren. |
 | `KIWM_LAN_IP` | Nur für den LAN-Stack. Private IPv4-Adresse des Ziel-Docker-Hosts. |
@@ -30,7 +30,7 @@ Im LAN ist die App unter `http://<DOCKER-HOST>:8765/` erreichbar. Beim Standards
 
 ## Lokaler Stack im Editor
 
-Für eine Installation mit einem festen Stand der Compose-Datei in **Stacks → New stack** den YAML-Editor öffnen und die Datei aus dem Release-Tag einfügen. Für SSH gilt [compose.yaml](https://github.com/adriantagonist87/KI-webmonitor/blob/v1.5.13/compose.yaml), für das LAN [portainer-lan-stack.yaml](https://github.com/adriantagonist87/KI-webmonitor/blob/v1.5.13/portainer-lan-stack.yaml). Die Variablen wie oben eintragen, **Deploy immediately** aktivieren und den Stack anlegen.
+Für eine Installation mit einem festen Stand der Compose-Datei in **Stacks → New stack** den YAML-Editor öffnen und die Datei aus dem Release-Tag einfügen. Für SSH gilt [compose.yaml](https://github.com/adriantagonist87/KI-webmonitor/blob/v1.5.14/compose.yaml), für das LAN [portainer-lan-stack.yaml](https://github.com/adriantagonist87/KI-webmonitor/blob/v1.5.14/portainer-lan-stack.yaml). Die Variablen wie oben eintragen, **Deploy immediately** aktivieren und den Stack anlegen.
 
 ## Aktualisieren
 

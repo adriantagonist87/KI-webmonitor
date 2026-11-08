@@ -5,7 +5,7 @@
 .login-logo{display:block;object-fit:contain;width:92px;height:104px;flex-shrink:0}
 .login-wordmark{border-left:3px solid #08a8ef;padding-left:22px;min-width:0}
 .login-brand{font-size:clamp(1.45rem,5vw,2.8rem);font-weight:750;line-height:1.2;letter-spacing:-.04em;margin:0;color:var(--text);white-space:nowrap}
-.login-brand span{color:#009de4}.login-tagline{color:var(--secondary);font-size:.78rem;line-height:1.5;margin:9px 0 0}
+.login-tagline{color:var(--secondary);font-size:.78rem;line-height:1.5;margin:9px 0 0}
 .login-card h1{font-size:2.6rem;line-height:1.2;letter-spacing:-.025em;margin:0 0 32px}
 .login-card h1:after{content:"";display:block;width:88px;height:6px;background:#04a5ed;border-radius:5px;margin-top:16px}
 .login-card form{display:grid;gap:10px}.login-card label{font-size:1rem;font-weight:700;margin:16px 0 2px}

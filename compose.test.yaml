@@ -40,7 +40,7 @@ services:
       timeout: 5s
       retries: 5
   fixture:
-    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.13}
+    image: ${IMAGE_PREFIX:-ki-webmonitor}-app:${VERSION:-1.5.14}
     restart: unless-stopped
     user: '1000:1000'
     read_only: true

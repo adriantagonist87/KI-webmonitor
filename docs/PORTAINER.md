@@ -13,7 +13,7 @@ benötigt Linux amd64 und Docker Standalone.
 | --- | --- |
 | Name | `ki-webmonitor-test` |
 | Repository URL | `https://github.com/adriantagonist87/KI-webmonitor.git` |
-| Repository reference | `refs/tags/v1.5.13` |
+| Repository reference | `refs/tags/v1.5.14` |
 | Compose path für Zugriff im LAN | `portainer-lan-stack.yaml` |
 | Compose path für Zugriff per SSH-Tunnel | `portainer-stack.yaml` |
 
@@ -22,7 +22,7 @@ Unter **Environment variables** eintragen:
 
 ```dotenv
 IMAGE_PREFIX=ghcr.io/adriantagonist87/ai-webmonitor
-VERSION=1.5.13
+VERSION=1.5.14
 KIWM_ADMIN_USERNAME=
 KIWM_ADMIN_PASSWORD=
 ```
@@ -46,11 +46,11 @@ GitHub-Quellcode allein liefert die Stack-Datei.
 ## Installation mit lokal geladenen Images
 
 Die fünf Images `ki-webmonitor-app`, `ki-webmonitor-browser`, `ki-webmonitor-proxy`,
-`ki-webmonitor-ingress` und `ki-webmonitor-page-reader` mit dem Tag `1.5.13` auf den
+`ki-webmonitor-ingress` und `ki-webmonitor-page-reader` mit dem Tag `1.5.14` auf den
 Docker-Host laden. App und Gateway verwenden dasselbe App-Image.
 
 ```sh
-gzip -dc KI-Webmonitor-1.5.13-Images.tar.gz | docker image load
+gzip -dc KI-Webmonitor-1.5.14-Images.tar.gz | docker image load
 ```
 
 In Portainer einen neuen **Standalone-Stack** anlegen und die Stack-Datei in
@@ -103,7 +103,7 @@ beispielsweise setzen:
 
 ```dotenv
 IMAGE_PREFIX=ghcr.io/OWNER/REPOSITORY
-VERSION=1.5.13
+VERSION=1.5.14
 ```
 
 Der Stack verwendet dann `${IMAGE_PREFIX}-app`, `-browser`, `-proxy`, `-ingress` und `-page-reader`.
