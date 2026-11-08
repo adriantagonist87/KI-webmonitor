@@ -4,9 +4,9 @@
 <h1 align="center">KI-Webmonitor</h1>
 <p align="center"><strong>Webseiten und Dokumente im Blick behalten</strong></p>
 
-Der KI-Webmonitor prüft Webseiten und verlinkte Dateien nach einem Zeitplan. Du legst für jedes Projekt fest, welche Bereiche er prüfen und welche Änderungen er melden soll. Im Dashboard findest du die Ergebnisse mit Quellenlink und Prüfverlauf. Heruntergeladene Dateifassungen stehen im Archiv zum Vergleich bereit.
+Der kostenlose KI-Webmonitor prüft Webseiten und verlinkte Dateien nach einem festgelegten Zeitplan. Du legst für jedes Projekt fest, welche Bereiche er prüfen und welche Änderungen er melden soll. Im Dashboard findest du die Ergebnisse mit Quellenlink und Prüfverlauf. Heruntergeladene Dateifassungen stehen im Archiv zum Vergleich bereit.
 
-Web-App, Brave und Archiv laufen in Docker. Für die KI-Auswertung verbindet sich der Stack mit einem selbst betriebenen oMLX-Server über dessen OpenAI-kompatible API.
+Web-App, Brave und Archiv laufen in Docker. Für die KI-Auswertung verbindet sich der Stack mit einem selbst betriebenen lokalen oMLX-Server über dessen OpenAI-kompatible API oder einen Cloudanbieter deiner Wahl.
 
 ![Projektübersicht mit Favicons für DKE, VDE, elektro.net und weitere Projekte aus der Gruppe Arbeit](docs/screenshots/dashboard.png)
 
