@@ -147,8 +147,12 @@ class DistributionTests(unittest.TestCase):
     def test_09_union_deduplicates_projects(self):
         did=self.create(project_ids=['public','private']);model,_=email_reports.for_distribution(self.model(),lists.get(did))
         self.assertEqual(model['counts']['sources'],3);self.assertEqual(set(model['projects']),{'public','quiet','private'})
-    def test_10_admin_keeps_hints(self):
-        bundle=email_reports.render(self.model());self.assertIn('ADMIN-HINT-CANARY',bundle['html']);self.assertIn('Hinweise',bundle['text'])
+    def test_10_global_report_excludes_notice_and_failure_rows(self):
+        bundle=email_reports.render(self.model())
+        for value in ('ADMIN-HINT-CANARY','ADMIN-NOTICE-PROJECT','ADMIN-FAILED-PROJECT','Hinweise'):
+            self.assertNotIn(value,bundle['html']+bundle['text'])
+        self.assertIn('Neue fachliche Veröffentlichung',bundle['html'])
+        self.assertIn('Keine Änderungen',bundle['text'])
     def test_11_later_failure_keeps_confirmed_change_but_not_problem_note(self):
         m=self.model();m['projects']['public']['problem']='ADMIN-LATER-FAILURE-CANARY'
         did=self.create();filtered,_=email_reports.for_distribution(m,lists.get(did));bundle=email_reports.render(filtered)
@@ -156,7 +160,7 @@ class DistributionTests(unittest.TestCase):
     def test_12_notice_only_is_skipped_and_never_claimed_unchanged(self):
         did=self.create(tag_ids=[],project_ids=['notice','failed']);rid,children=self.batch(did)
         self.assertTrue(all(c['mail_status']=='skipped' for c in children));self.assertEqual(len(children),2)
-        html=email_reports.saved_html(children[0]);self.assertNotIn('ADMIN-NOTICE',html);self.assertNotIn('Unverändert',html)
+        html=email_reports.saved_html(children[0]);self.assertNotIn('ADMIN-NOTICE',html);self.assertNotIn('Keine Änderungen',html)
     def test_13_recipient_archive_does_not_change_with_list_edits(self):
         did=self.create();_,children=self.batch(did);child=children[0];before=email_reports.saved_html(child)
         lists.save(self.config(alias='Geänderter Alias',tag_ids=[self.private]),did)
@@ -273,7 +277,7 @@ class DistributionTests(unittest.TestCase):
         requests=[]
         async def llm(messages,*args,**kwargs):requests.append(messages);return {'choices':[{'message':{'content':'{"headlines":[]}'}}]}
         asyncio.run(email_reports.compact_headlines(self.model(),llm,'local-model'))
-        self.assertEqual(len(requests),3)
+        self.assertEqual(len(requests),2)
         for messages in requests:
             payload=json.loads(messages[1]['content']);self.assertEqual(len(payload),1)
             if payload[0]['id']=='public':self.assertNotIn('PRIVATE-',json.dumps(messages));self.assertNotIn('ADMIN-HINT-',json.dumps(messages))

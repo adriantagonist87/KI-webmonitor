@@ -19,6 +19,8 @@ LINK_STYLE='color:'+COLOR+';text-decoration:none;'
 PRIVATE_KEYS={'token','password','passwort','api_key','apikey','access_token','authorization','abonummer','plz','secret'}
 URL_TEXT=re.compile(r'https?://[^\s<>"\']+',re.I)
 FILE_SUFFIXES=tuple(EXTENSIONS)
+REPORT_SECTIONS=(('changed','Relevante Änderungen'),('unchanged','Keine Änderungen'))
+REPORT_CATEGORIES={category for category,_ in REPORT_SECTIONS}
 
 def plain(value,limit=180):
     soup=BeautifulSoup(str(render_report(str(value or ''))),'html.parser')
@@ -216,7 +218,8 @@ async def compact_headlines(model,llm,model_name):
     """Optional local text condensation of existing evidence; failures retain facts."""
     result=copy.deepcopy(model)
     candidates=[p for p in result['projects'].values()
-                if p['evidence'] and not any(fact['kind']==PRESTANDARD_KIND for fact in p['evidence'])]
+                if p['category']=='changed' and p['evidence']
+                and not any(fact['kind']==PRESTANDARD_KIND for fact in p['evidence'])]
     if not candidates or not model_name:return result
     try:
         async def work():
@@ -246,7 +249,7 @@ def for_distribution(model,distribution):
     assigned=set(direct)
     for group in model['groups']:
         if group.get('id') in tag_ids:assigned.update(group['projects'])
-    eligible={pid for pid in assigned if pid in model['projects'] and model['projects'][pid]['category'] in ('changed','unchanged')}
+    eligible={pid for pid in assigned if pid in model['projects'] and model['projects'][pid]['category'] in REPORT_CATEGORIES}
     views={};blocked=_app_hosts(model.get('base_url'))
     for pid in eligible:
         p=model['projects'][pid]
@@ -277,32 +280,26 @@ def for_distribution(model,distribution):
 
 def render(model,icons=None):
     images=Images();logo=images.logo();icons=icons or {}
-    views=copy.deepcopy(model['projects'])
+    views={pid:dict(p) for pid,p in model['projects'].items() if p['category'] in REPORT_CATEGORIES}
     blocked=_app_hosts(model.get('base_url'))
+    recipient=model.get('audience')=='distribution'
     for pid,p in views.items():
         p['cid']=images.project(icons.get(pid))
         p['url']=_website(p['url'],blocked)
         p['name']=_strip_unapproved_urls(p['name'],set())
         p['message']=_strip_unapproved_urls(p['message'],set())
+        if recipient:p['app_url']=''
     html=['<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wochenbericht · KI-Webmonitor</title></head>',
       '<body style="margin:0;padding:14px 0;background:#f1f4f8;color:#1c2c44;font-family:Arial,Helvetica,sans-serif;line-height:1.4"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">',
       '<table role="presentation" width="700" cellpadding="0" cellspacing="0" style="width:100%;max-width:700px;table-layout:fixed;background:#ffffff;border:1px solid #d8e1ed">',
-      '<tr><td style="padding:12px 14px 8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="45" valign="middle"><img src="cid:'+logo+'" width="32" height="36" alt="KI-Webmonitor" style="display:block;border:0"></td><td><div style="font-size:11px"><span style="color:#009de4">KI-</span>Webmonitor</div><h1 style="font-size:24px;line-height:1.15;margin:0;font-weight:700">Wochenbericht</h1></td><td align="right" valign="bottom" style="font-size:11px;color:'+COLOR+'">'+str(model['counts']['sources'])+' überwachte Quellen</td></tr></table></td></tr>',
+      '<tr><td style="padding:12px 14px 8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="52" valign="middle"><img src="cid:'+logo+'" width="40" height="40" alt="KI-Webmonitor" style="display:block;border:0"></td><td><div style="font-size:11px"><span style="color:#009de4">KI-</span>Webmonitor</div><h1 style="font-size:24px;line-height:1.15;margin:0;font-weight:700">Wochenbericht</h1></td><td align="right" valign="bottom" style="font-size:11px;color:'+COLOR+'">'+str(len(views))+' überwachte Quellen</td></tr></table></td></tr>',
       '<tr><td style="padding:0 14px 10px;font-size:11px;color:'+COLOR+'">'+escape(model['period'])+'</td></tr>']
-    c=model['counts'];recipient=model.get('audience')=='distribution'
-    if recipient:
-        for p in views.values():p['app_url']=''
-    if recipient:
-        text=['KI-Webmonitor – Wochenbericht',model['period'],f"{c['sources']} Quellen",f"{c['changed']} Änderungen · {c['unchanged']} unverändert",'']
-    else:text=['KI-Webmonitor – Wochenbericht',model['period'],f"{c['sources']} überwachte Quellen · {c['checked']} geprüft · {c['successful']} erfolgreich · {c['failed']} aktuell fehlerhaft/unvollständig",f"{c['changed']} Änderungen · {c['notices']} Hinweise · {c['unchanged']} unverändert",'']
+    text=['KI-Webmonitor – Wochenbericht',model['period'],f'{len(views)} überwachte Quellen','']
     for group in model['groups']:
-        ids=group['projects'];name=group['name'];color=group['color']
+        ids=[pid for pid in group['projects'] if pid in views];name=group['name'];color=group['color']
         html.append('<tr><td data-tag-name="'+escape(name,quote=True)+'" bgcolor="'+color+'" style="background:'+color+';padding:7px 14px;color:#ffffff;font-size:14px"><strong>'+escape(name)+'</strong> <span style="font-size:11px">'+str(len(ids))+' Quellen</span></td></tr>')
         text.extend([name.upper(),''])
-        if not ids:
-            html.append('<tr><td style="padding:10px 14px;font-size:11px;color:'+COLOR+'">Aktuell keine Quellen zugeordnet.</td></tr>');text.append('Aktuell keine Quellen zugeordnet.');continue
-        for category,label in (('changed','Relevante Änderungen'),('notice','Hinweise'),('unchanged','Unverändert')):
-            if recipient and category=='notice':continue
+        for category,label in REPORT_SECTIONS:
             rows=[views[pid] for pid in ids if views[pid]['category']==category]
             if not rows:continue
             html.append('<tr><td bgcolor="#e8edf3" style="padding:6px 14px;background:#e8edf3;border-bottom:1px solid #d8e1ed;font-size:12px"><strong>'+label+'</strong> <span style="font-size:11px;color:'+COLOR+'">('+str(len(rows))+')</span></td></tr>')
@@ -314,7 +311,7 @@ def render(model,icons=None):
                     html.append('<td width="33.33%" valign="top" style="padding-right:8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:11px;line-height:16px;color:'+COLOR+'">')
                     for p in rows[column*height:(column+1)*height]:
                         html.append('<tr data-project-id="'+escape(str(p['id']),quote=True)+'" data-category="unchanged"><td width="22" valign="top" style="padding:0 0 6px"><img src="cid:'+p['cid']+'" width="16" height="16" alt="" style="display:block;border:0"></td><td valign="top" style="padding:0 0 6px;overflow-wrap:anywhere">'+link(p['url'],p['name'])+'</td></tr>')
-                        text.extend([p['name']+(' · '+p['url'] if p['url'] else ''),'Keine relevanten Änderungen.'])
+                        text.append(p['name']+(' · '+p['url'] if p['url'] else ''))
                     html.append('</table></td>')
                 html.append('</tr></table></td></tr>');continue
             for p in rows:
@@ -322,11 +319,10 @@ def render(model,icons=None):
                 source_line=link(source,'Originalquelle') if source else ''
                 prestandards=_strip_unapproved_urls(' · '.join(_sequence(p.get('prestandards'))),set())
                 app_link='<td width="90" valign="top" align="right">'+link(p['app_url'],'Webmonitor ›')+'</td>' if p['app_url'] else ''
-                html.append('<tr data-project-id="'+escape(str(p['id']),quote=True)+'" data-category="'+category+'"><td style="padding:7px 14px 8px;border-bottom:1px solid #d8e1ed"><p style="font-size:13px;font-weight:700;line-height:18px;margin:0 0 4px">'+escape(p['message'])+'</p><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:11px;color:'+COLOR+';line-height:16px"><tr><td width="22" valign="top"><img src="cid:'+p['cid']+'" width="16" height="16" alt="" style="display:block;border:0"></td><td valign="top">'+escape(p['name'])+(' · '+source_line if source_line else '')+(' <span style="font-size:10px;color:#906017">· Prüfproblem: '+escape(p['problem'])+'</span>' if p['problem'] else '')+('<div>'+escape(prestandards)+'</div>' if prestandards else '')+'</td>'+app_link+'</tr></table></td></tr>')
+                html.append('<tr data-project-id="'+escape(str(p['id']),quote=True)+'" data-category="'+category+'"><td style="padding:7px 14px 8px;border-bottom:1px solid #d8e1ed"><p style="font-size:13px;font-weight:700;line-height:18px;margin:0 0 4px">'+escape(p['message'])+'</p><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:11px;color:'+COLOR+';line-height:16px"><tr><td width="22" valign="top"><img src="cid:'+p['cid']+'" width="16" height="16" alt="" style="display:block;border:0"></td><td valign="top">'+escape(p['name'])+(' · '+source_line if source_line else '')+('<div>'+escape(prestandards)+'</div>' if prestandards else '')+'</td>'+app_link+'</tr></table></td></tr>')
                 text.extend([p['message'],p['name']])
                 if source:text.append('Originalquelle · '+source)
                 if prestandards:text.append(prestandards)
-                if p['problem']:text.append('Prüfproblem: '+p['problem'])
                 if p['app_url']:text.append('Webmonitor: '+p['app_url'])
             text.append('')
     html.append('</table></td></tr></table></body></html>')

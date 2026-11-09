@@ -43,12 +43,19 @@ class WeeklyReport(unittest.TestCase):
         self.assertEqual([(e['data-tag-name'],e['bgcolor']) for e in soup.select('[data-tag-name]')],[('Arbeit','#df482a'),('Privat','#2f88d0')])
         self.assertIn('0 Quellen',soup.select('[data-tag-name]')[1].text)
     def test_03_order_and_three_quiet_columns(self):
-        html=reports.render(model())['html'];self.assertLess(html.index('Relevante Änderungen'),html.index('Hinweise'));self.assertLess(html.index('Hinweise'),html.index('Unverändert'))
+        bundle=reports.render(model())
+        html=bundle['html']
+        self.assertLess(html.index('Relevante Änderungen'),html.index('Keine Änderungen'))
+        self.assertNotIn('Hinweise',html+bundle['text'])
+        self.assertIn('13 überwachte Quellen',bundle['text'])
         soup=BeautifulSoup(html,'html.parser');table=soup.select_one('[data-quiet-columns]');self.assertEqual(len(table.find('tr',recursive=False).find_all('td',recursive=False)),3)
+        self.assertEqual(len(soup.select('[data-project-id]')),13)
         self.assertEqual(len(table.select('[data-project-id]')),11)
     def test_04_later_failed_run_does_not_hide_change(self):
         m=model();p=m['projects']['1'];self.assertEqual(p['category'],'changed');self.assertIn('Bot-Schutz',p['problem'])
-        html=reports.render(m)['html'];self.assertIn('Neue VDE-Norm',html);self.assertIn('Prüfproblem: Bot-Schutz',html)
+        bundle=reports.render(m)
+        self.assertIn('Neue VDE-Norm',bundle['html'])
+        self.assertNotIn('Bot-Schutz',bundle['html']+bundle['text'])
     def test_05_multi_tag_same_source_unique_count(self):
         data=list(demo());data[0][3]['tags'].append('Privat');m=model(data)
         self.assertEqual(m['counts']['sources'],14);self.assertEqual([len(g['projects']) for g in m['groups']],[14,1])
@@ -60,7 +67,7 @@ class WeeklyReport(unittest.TestCase):
         self.assertEqual(len(m['groups'][0]['projects']),14);self.assertEqual(len(m['groups'][1]['projects']),1)
     def test_07_hundred_sources_without_output_limit(self):
         m=model(demo(100));html=reports.render(m)['html'];soup=BeautifulSoup(html,'html.parser')
-        self.assertEqual(len(soup.select('[data-project-id]')),100);self.assertEqual(len(soup.select('[data-category="unchanged"]')),97)
+        self.assertEqual(len(soup.select('[data-project-id]')),99);self.assertEqual(len(soup.select('[data-category="unchanged"]')),97)
     def test_08_zero_changes_and_no_projects(self):
         data=list(demo());data[1]=data[1][:14];data[2]=[];m=model(data)
         self.assertEqual(m['counts']['unchanged'],14);self.assertNotIn('Relevante Änderungen',reports.render(m)['html'])
@@ -75,10 +82,13 @@ class WeeklyReport(unittest.TestCase):
         m=model();soup=BeautifulSoup(reports.render(m)['html'],'html.parser')
         for p in m['projects'].values():
             a=soup.find('a',href=p['url'])
+            if p['category']=='notice':
+                self.assertIsNone(a)
+                continue
             self.assertEqual(a.get_text(),p['name'] if p['category']=='unchanged' else 'Originalquelle')
             self.assertIn('text-decoration:none',a['style'])
         app_links=[a['href'] for a in soup.find_all('a') if a.get_text()=='Webmonitor ›']
-        self.assertEqual(set(app_links),{ORIGIN+'/projects/'+str(i) for i in range(3)})
+        self.assertEqual(set(app_links),{ORIGIN+'/projects/'+str(i) for i in range(2)})
     def test_11_no_origin_no_local_app_links_and_secret_query_rejected(self):
         data=demo();m=reports.build_model(*data,base_url='');html=reports.render(m)['html'];self.assertNotIn('Webmonitor ›',html)
         for url in ('https://u:p@example.org','https://example.org?api_key=SECRET','https://example.org?password=SECRET','file:///etc/passwd'):
@@ -86,6 +96,10 @@ class WeeklyReport(unittest.TestCase):
     def test_12_cid_parts_deduplicated_and_real_png(self):
         bundle=reports.render(model());images=report_images.validate(bundle['images'],bundle['html']);self.assertEqual(len(images),2)
         for raw in images.values():self.assertEqual(Image.open(io.BytesIO(raw)).format,'PNG')
+        logo=BeautifulSoup(bundle['html'],'html.parser').select_one('img[alt="KI-Webmonitor"]')
+        mascot=Path(report_images.__file__).parent/'static/login-mascot.png'
+        self.assertEqual(images[logo['src'].removeprefix('cid:')],report_images.png(mascot.read_bytes(),logo=True))
+        self.assertEqual(logo['width'],logo['height'])
     def test_13_svg_rasterized_and_corrupt_favicon_falls_back(self):
         svg=b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><script>evil()</script><rect fill="#df482a" width="24" height="24"/></svg>'
         record=project_icons.record(svg);bundle=reports.render(model(),{'0':record,'1':{'data':'CORRUPT'}})

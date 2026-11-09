@@ -39,7 +39,7 @@ class Images:
         self.items[cid]={'cid':cid,'media_type':'image/png','data':base64.b64encode(raw).decode('ascii')}
         return cid
     def logo(self):
-        try:raw=png((Path(__file__).parent/'static/app-logo.png').read_bytes(),logo=True)
+        try:raw=png((Path(__file__).parent/'static/login-mascot.png').read_bytes(),logo=True)
         except (OSError,ValueError):raw=fallback()
         return self.add(raw)
     def project(self,value):
