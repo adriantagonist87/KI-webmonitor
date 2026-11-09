@@ -139,7 +139,9 @@ class ReportSourceTests(unittest.TestCase):
         run={'id':'run','project_id':'project','status':'success','started':'2026-11-06T12:59:00+00:00'}
         text,html=email_reports.compose([project],[run],[change],[],
             '2026-11-01T00:00:00+00:00','2026-11-07T00:00:00+00:00')
-        self.assertIn('1 Änderungen',text)
+        self.assertIn('Relevante Änderungen (1)',text)
+        self.assertIn('Originalquelle · '+SOURCE,text)
+        self.assertNotIn(DOCUMENT,text+html)
         self.assertIn('Eine bereitgestellte Datei wurde geändert.',html)
         self.assertNotIn('Hinweis · Datei geändert',html)
         self.assertNotIn('SHA-256',html)

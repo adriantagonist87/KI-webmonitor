@@ -89,7 +89,7 @@ class WeeklyReport(unittest.TestCase):
         self.assertFalse(soup.select('script,style,iframe,[onerror]'));self.assertIn('&lt;img',bundle['html']);self.assertNotIn('javascript:',bundle['html'])
         self.assertTrue(all(i['src'].startswith('cid:') for i in soup.select('img')))
     def test_10_project_links_and_neutral_styles(self):
-        m=model();soup=BeautifulSoup(reports.render(m)['html'],'html.parser')
+        m=model();bundle=reports.render(m);soup=BeautifulSoup(bundle['html'],'html.parser')
         for p in m['projects'].values():
             a=soup.select_one(f'[data-source-overview] [data-project-id="{p["id"]}"] a')
             if p['category']=='notice':
@@ -98,8 +98,9 @@ class WeeklyReport(unittest.TestCase):
             self.assertEqual(a.get_text(),p['name'])
             self.assertEqual(a['href'],p['url'])
             self.assertIn('text-decoration:underline',a['style'])
-        app_links=[a['href'] for a in soup.find_all('a') if a.get_text()=='Webmonitor ›']
-        self.assertEqual(set(app_links),{ORIGIN+'/projects/'+str(i) for i in range(2)})
+        self.assertEqual({a['href'] for a in soup.select('a[href]')},
+                         {p['url'] for p in m['projects'].values() if p['category']!='notice'})
+        self.assertNotIn(ORIGIN,bundle['text']+bundle['html'])
     def test_11_no_origin_no_local_app_links_and_secret_query_rejected(self):
         data=demo();m=reports.build_model(*data,base_url='');html=reports.render(m)['html'];self.assertNotIn('Webmonitor ›',html)
         for url in ('https://u:p@example.org','https://example.org?api_key=SECRET','https://example.org?password=SECRET','file:///etc/passwd'):
@@ -141,6 +142,29 @@ class WeeklyReport(unittest.TestCase):
         eml=client.get('/reports/weekly/message.eml');self.assertEqual(eml.status_code,200);self.assertEqual(BytesParser(policy=policy.default).parsebytes(eml.content).get_body('html').get_content().rstrip(),bundle['html'].rstrip())
         self.assertEqual(client.get('/reports/missing/html').status_code,404);self.assertEqual(client.get('/reports/weekly/assets/missing').status_code,404)
         self.assertEqual(client.get('/').headers['x-frame-options'],'DENY')
+    def test_old_admin_links_are_filtered_at_delivery_preview_and_eml(self):
+        import report_mail
+        _,bundle=self.saved()
+        internal='https://old-monitor.example.org/projects/0'
+        direct_file='https://source0.example.org/file.pdf'
+        path=self.root/'reports/weekly.html'
+        legacy=bundle['html'].replace('</body>',f'<a href="{internal}">Webmonitor ›</a>'
+            f'<a href="{direct_file}">PDF</a><a href="/reports/weekly">Analyse öffnen</a></body>')
+        path.write_text(legacy,encoding='utf-8')
+        store.execute('UPDATE reports SET content=content||? WHERE id=?',
+                      (f'\nWebmonitor: {internal}\n{direct_file}','weekly'))
+        sender=AsyncMock(return_value='production')
+        self.assertTrue(asyncio.run(report_mail.deliver('weekly',sender))['sent'])
+        text,_,_,html,_,_=sender.call_args.args
+        client=TestClient(web.app)
+        eml=BytesParser(policy=policy.default).parsebytes(client.get('/reports/weekly/message.eml').content)
+        for part in (text,html,client.get('/reports/weekly/html').text,
+                     eml.get_body('plain').get_content(),eml.get_body('html').get_content()):
+            self.assertNotIn(internal,part)
+            self.assertNotIn(direct_file,part)
+            self.assertNotIn('Analyse öffnen',part)
+            self.assertIn('https://source0.example.org/',part)
+        self.assertEqual(path.read_text(encoding='utf-8'),legacy)
     def test_18_archive_contains_report_and_inline_assets(self):
         r,bundle=self.saved();archive=self.root/'backup.zip';transfer.export_to(archive,history=True)
         package=transfer.read_package(archive)

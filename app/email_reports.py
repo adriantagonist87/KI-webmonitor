@@ -10,7 +10,6 @@ from document_types import EXTENSIONS
 from report_render import render_report
 from report_images import Images,validate as validate_images,CID
 from project_meta import normalize_tags,normalize_color
-from project_urls import detail_path
 from lan_access import public_origin
 from dke_standards import PRESTANDARD_KIND
 import attention,store
@@ -86,7 +85,7 @@ def _fallback(items,category):
 def _app_hosts(*origins):
     values=(*origins,os.environ.get('KIWM_PUBLIC_URL',''),os.environ.get('KIWM_LAN_URL',''))
     return {'localhost','127.0.0.1','::1','app','ingress','gateway'} | {
-        urlsplit(url).hostname for value in values if (url:=safe_url(value))}
+        urlsplit(url).hostname.rstrip('.') for value in values if (url:=safe_url(value))}
 
 
 def _external_source(value,blocked):
@@ -197,7 +196,7 @@ def build_model(projects,runs,changes,tags,start,end,base_url=None,source_snapsh
                 if designation:prestandards.append('Vornorm '+designation)
         views[p['id']]={'id':p['id'],'name':' '.join(str(p['name']).split()),'url':overview,
             'source_page':source_page,'prestandards':list(dict.fromkeys(prestandards)),
-            'app_url':base+detail_path(p['id']) if base else '', 'category':category,'message':message,
+            'category':category,'message':message,
             'problem':problem if items else '', 'notice_count':len(items)-len(important),'change_count':len(important),'evidence':evidence}
         try:names=normalize_tags(json.loads(p.get('tags','[]')) if isinstance(p.get('tags'),str) else p.get('tags',[]))
         except (ValueError,TypeError):names=[]
@@ -254,7 +253,7 @@ def for_distribution(model,distribution):
         p=model['projects'][pid]
         overview=_website(p['url'],blocked)
         source_page=_website(p.get('source_page') or overview,blocked)
-        views[pid]={'id':pid,'name':p['name'],'url':overview,'source_page':source_page,'app_url':'','category':p['category'],
+        views[pid]={'id':pid,'name':p['name'],'url':overview,'source_page':source_page,'category':p['category'],
                    'message':p['message'] if p['category']=='changed' else '',
                    'problem':'','notice_count':0,'change_count':p['change_count'],'evidence':[],
                    'prestandards':p.get('prestandards',[])}
@@ -282,7 +281,6 @@ def render(model, icons=None):
     logo = images.logo()
     icons = icons or {}
     blocked = _app_hosts(model.get('base_url'))
-    recipient = model.get('audience') == 'distribution'
     views = {}
     for pid, project in model['projects'].items():
         if project['category'] not in REPORT_CATEGORIES:
@@ -295,7 +293,6 @@ def render(model, icons=None):
             'message': _strip_unapproved_urls(project['message'], set()),
             'url': overview,
             'source_page': _website(project.get('source_page'), blocked) or overview,
-            'app_url': '' if recipient else safe_url(project.get('app_url')),
             'prestandards': _strip_unapproved_urls(' · '.join(_sequence(project.get('prestandards'))), set()),
         }
 
@@ -335,8 +332,6 @@ def render(model, icons=None):
                         text.append('Originalquelle · ' + project['source_page'])
                     if project['prestandards']:
                         text.append(project['prestandards'])
-                    if project['app_url']:
-                        text.append('Webmonitor: ' + project['app_url'])
             text.append('')
     return {'text': '\n'.join(text), 'html': html, 'images': list(images.items.values()), 'model': model}
 
@@ -369,24 +364,45 @@ def _strip_unapproved_urls(text,allowed):
 
 
 def message_parts(report,model=None):
-    """Limit recipient previews and deliveries to the archived public sources."""
+    """Limit previews and deliveries to source websites, including old archives."""
     text,html=report['content'],saved_html(report)
-    if report.get('audience')!='distribution':return text,html
+    archive_origin = ''
     if model is None:
         manifest=store.read_json(store.DATA/'reports'/(report['id']+'.images.json'))
-        model=manifest.get('model',{}) if isinstance(manifest,dict) else {}
-    blocked=_app_hosts(model.get('base_url'))
+        if isinstance(manifest,dict):
+            model=manifest.get('model')
+            archive_origin=manifest.get('base_url')
+    model=model if isinstance(model,dict) else {}
+    soup=BeautifulSoup(html,'html.parser')
+    anchors=soup.select('a[href]')
+    lines=text.split('\n')
+    app_lines=[line for line in lines if line.lstrip().startswith('Webmonitor:')]
+    app_links={anchor['href'] for anchor in anchors if anchor.get_text(' ',strip=True)=='Webmonitor ›'}
+    blocked=_app_hosts(archive_origin,model.get('base_url'),
+                       *app_links,
+                       *(line.partition(':')[2].strip() for line in app_lines))
     allowed=set()
-    if model.get('audience')=='distribution':
-        for p in model.get('projects',{}).values():
+    recipient=report.get('audience')=='distribution'
+    projects=model.get('projects')
+    if isinstance(projects,dict) and (not recipient or model.get('audience')=='distribution'):
+        for p in projects.values():
             for value in (p.get('url'),p.get('source_page'),*_sequence(p.get('source_urls'))):
-                if url:=_external_source(value,blocked):allowed.add(url)
-    text='\n'.join(_strip_unapproved_urls(line,allowed) for line in text.split('\n') if not line.startswith('Webmonitor: '))
-    soup=BeautifulSoup(html,'html.parser');dirty=False
-    for anchor in soup.select('a[href]'):
-        if anchor['href'] in allowed:continue
-        if anchor.get_text(' ',strip=True)=='Webmonitor ›' or anchor['href'].startswith(('/runs/','/projects/','/reports/','/artifacts/','/documents/')):
+                if url:=_website(value,blocked):allowed.add(url)
+    elif not recipient:
+        # Portable reports from before the source manifest keep readable
+        # external links, using the archived app labels to identify old hosts.
+        candidates=[anchor['href'] for anchor in anchors]
+        candidates.extend(match[0].rstrip('.,;!?)]}') for match in URL_TEXT.finditer(text))
+        allowed={url for value in candidates if (url:=_website(value,blocked))}
+    text='\n'.join(_strip_unapproved_urls(line,allowed) for line in lines if line not in app_lines)
+    dirty=False
+    for anchor in anchors:
+        if anchor['href'] in app_links or anchor['href'].startswith(('/runs/','/projects/','/reports/','/artifacts/','/documents/')):
+            separator=anchor.previous_sibling
+            if isinstance(separator,str) and separator.strip()=='·':separator.extract()
             anchor.decompose()
+        elif anchor['href'] in allowed:
+            continue
         else:anchor.unwrap()
         dirty=True
     for node in soup.find_all(string=True):

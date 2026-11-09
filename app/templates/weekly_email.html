@@ -55,13 +55,7 @@
         <td valign="top" style="padding:8px 10px;border-top:1px solid #d3dde9;font-size:13px;line-height:18px;word-wrap:break-word">
           <strong>{{ project.message }}</strong>
           {% if project.prestandards %}<div style="margin-top:3px;color:#526580">{{ project.prestandards }}</div>{% endif %}
-          {% if project.source_page or project.app_url %}
-          <div style="margin-top:3px;font-size:12px">
-            {% if project.source_page %}{{ mail_link(project.source_page,'Originalquelle') }}{% endif %}
-            {% if project.source_page and project.app_url %} · {% endif %}
-            {% if project.app_url %}{{ mail_link(project.app_url,'Webmonitor ›') }}{% endif %}
-          </div>
-          {% endif %}
+          {% if project.source_page %}<div style="margin-top:3px;font-size:12px">{{ mail_link(project.source_page,'Originalquelle') }}</div>{% endif %}
         </td>
       </tr>
     {% endfor %}

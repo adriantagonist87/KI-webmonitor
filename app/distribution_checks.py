@@ -98,8 +98,7 @@ class DistributionTests(unittest.TestCase):
         admin=BeautifulSoup(email_reports.render(model)['html'],'html.parser')
         change_rows=admin.select('tr[data-change-project-id="public"]')
         self.assertEqual(len(change_rows),1)
-        self.assertEqual([a['href'] for a in change_rows[0].select('a[href]')],
-                         [article,'https://monitor.example.org/projects/public'])
+        self.assertEqual([a['href'] for a in change_rows[0].select('a[href]')],[article])
         admin_rows=admin.select('tr[data-project-id="public"]')
         self.assertEqual(len(admin_rows),2)
         for row in admin_rows:

@@ -75,7 +75,7 @@ Das **Globale Dateiverzeichnis** bietet Suche und Sortierung über Projekte hinw
 
 - **Telegram** meldet relevante Änderungen und Prüfprobleme. Die Automatik lässt sich global oder je Projekt steuern. Meldungen verlinken ihre Quellen.
 - **E-Mail** liefert einen HTML-Wochenbericht mit Textalternative. Der Bericht entsteht montags um 08:00 Uhr in der Zeitzone `Europe/Berlin`. SMTP, Verbindungstest und Testmail lassen sich in der App einrichten. Vorschauen können ohne produktiven Versand erstellt werden.
-- **Verteilerlisten** beschränken Empfängerberichte auf ausgewählte Projekte oder Tags. Empfänger sehen relevante Änderungen und unveränderte Quellen, jeweils mit Originalquellen. Adminhinweise und interne Webmonitor-Links bleiben im Adminbericht. Die Adminansicht archiviert Berichte und Versandstatus chronologisch.
+- **Verteilerlisten** beschränken Empfängerberichte auf ausgewählte Projekte oder Tags. Wochenberichte verlinken die überwachten Websites und die Originalquellen relevanter Änderungen. Die Adminansicht archiviert Berichte und Versandstatus chronologisch.
 
 ![Wochenbericht für den Tag Arbeit mit Favicons der Quellen in einer geöffneten E-Mail im Stil von Outlook 2024](docs/screenshots/wochenbericht.png)
 
