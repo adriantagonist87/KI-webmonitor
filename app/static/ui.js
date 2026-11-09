@@ -70,6 +70,31 @@
     }));
     sync();
 
+    const maintenanceTable = document.querySelector('[data-maintenance-sortable]');
+    if (maintenanceTable) {
+      const collator = new Intl.Collator('de', {numeric: true, sensitivity: 'base'});
+      const rows = [...maintenanceTable.querySelectorAll('[data-maintenance-project]')];
+      const compareNames = (a, b) => collator.compare(a.cells[0].dataset.sortValue, b.cells[0].dataset.sortValue);
+      const sortRows = (column, ascending) => {
+        const order = ascending ? 1 : -1;
+        rows.sort((a, b) => {
+          if (column === 0) return order * compareNames(a, b);
+          const difference = Number(a.cells[column].dataset.sortValue) - Number(b.cells[column].dataset.sortValue);
+          return order * difference || compareNames(a, b);
+        });
+        if (rows.length) maintenanceTable.tBodies[0].append(...rows);
+      };
+      sortRows(0, true);
+      maintenanceTable.querySelectorAll('[data-maintenance-sort]').forEach(button => button.addEventListener('click', () => {
+        const header = button.closest('th');
+        const active = maintenanceTable.querySelector('th[aria-sort]');
+        const ascending = active === header ? header.getAttribute('aria-sort') === 'descending' : header.cellIndex === 0;
+        active?.removeAttribute('aria-sort');
+        header.setAttribute('aria-sort', ascending ? 'ascending' : 'descending');
+        sortRows(header.cellIndex, ascending);
+      }));
+    }
+
     // Search only document metadata on the server; leave the search field in
     // place so debounced result updates never steal focus or move its caret.
     const filesForm = document.querySelector('[data-files-search]');

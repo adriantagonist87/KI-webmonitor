@@ -33,7 +33,7 @@
 
 {% if planned %}
 <section class="card" id="vorschau">
-  <h2>{{'Vorschau für den Neustart' if planned.reset else 'Bereinigungsvorschau'}}</h2>
+  <h2>{{'Vorschau für das Zurücksetzen' if planned.reset else 'Bereinigungsvorschau'}}</h2>
   {% if planned.policy %}
   <p>{{planned.snapshots}} überzählige Archivaufnahmen nach den gespeicherten Regeln.</p>
   {% else %}
@@ -59,7 +59,7 @@
     {% for area in options['global'] %}<input type="hidden" name="global" value="{{area}}">{% endfor %}
     <label class="check-label"><input type="checkbox" name="confirm" required>Auswahl endgültig löschen</label>
     {% if planned.reset %}<div class="field-group"><label for="reset-confirmation">Zur Bestätigung NEUSTART eingeben</label><input id="reset-confirmation" name="reset_confirmation" required autocomplete="off" pattern="NEUSTART"></div>{% endif %}
-    <div class="form-footer"><button class="danger" {% if unavailable %}disabled{% endif %}>{{icon('trash')}}{{'Alle Projekte zurücksetzen' if planned.reset else 'Auswahl bereinigen'}}</button><a class="button neutral" href="/maintenance">Abbrechen</a></div>
+    <div class="form-footer"><button class="danger" {% if unavailable %}disabled{% endif %}>{{icon('trash')}}{{'Prüfverlauf aller Projekte löschen' if planned.reset else 'Auswahl bereinigen'}}</button><a class="button neutral" href="/maintenance">Abbrechen</a></div>
   </form>
   {% else %}<p class="field-help">Für diese Auswahl gibt es derzeit nichts zu bereinigen.</p>{% endif %}
 </section>
@@ -67,11 +67,12 @@
 
 <section class="card" id="neustart">
   <h2>Alle Projekte auf Erstauswertung zurücksetzen</h2>
-  <p>Entfernt den gesamten Prüfverlauf, die erkannten Änderungen und die zugehörigen Archivdateien. Die nächste Prüfung jedes Projekts baut einen neuen Vergleichsstand auf. Projekte, Prompts, Zeitpläne, Zugänge, Makros und gespeicherte Wochenberichte bleiben erhalten. Alte Berichtslinks zu gelöschten Prüfungen können danach ins Leere führen.</p>
+  <p>Die Vorschau zeigt, welche Prüfungen und Dateien betroffen sind. Erst mit deiner Bestätigung in der Vorschau werden der Prüfverlauf, die erkannten Änderungen und die zugehörigen Archivdateien gelöscht.</p>
+  <p>Die nächste Prüfung jedes Projekts baut einen neuen Vergleichsstand auf. Projekte, Prompts, Zeitpläne, Zugänge, Makros und gespeicherte Wochenberichte bleiben erhalten. Alte Berichtslinks zu gelöschten Prüfungen können danach ins Leere führen.</p>
   <p class="field-help">Über <a href="/transfer">Export / Import</a> lässt sich der Prüfverlauf vorab als Archiv sichern.</p>
   <form method="post" action="/maintenance/preview#vorschau">
     <input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="kind" value="reset">
-    <button class="secondary" {% if unavailable or not storage.projects %}disabled{% endif %}>{{icon('eye')}}Neustart prüfen</button>
+    <button class="secondary" {% if unavailable or not storage.projects %}disabled{% endif %}>{{icon('eye')}}Vorschau für das Zurücksetzen öffnen</button>
   </form>
 </section>
 
@@ -82,16 +83,20 @@
   {% set selected = options['items'] if options else [] %}
   {% set columns = [('documents','Originaldateien'),('history','Prüfverlauf'),('events','Protokolle')] %}
   <div class="tablewrap maintenance-table" tabindex="0" role="region" aria-label="Speicherbelegung und Bereinigung je Projekt">
-    <table>
-      <thead><tr><th scope="col">Projekt</th>{% for key,label in columns %}<th scope="col">{{label}}</th>{% endfor %}</tr></thead>
+    <table data-maintenance-sortable>
+      <thead><tr>{% for _,label in [('name','Projekt')] + columns %}
+        <th scope="col" {% if loop.first and storage.projects %}aria-sort="ascending"{% endif %}>
+          {% if storage.projects %}<button type="button" class="maintenance-sort" data-maintenance-sort>{{label}}<span class="maintenance-sort-arrow" aria-hidden="true"></span></button>{% else %}{{label}}{% endif %}
+        </th>
+      {% endfor %}</tr></thead>
       <tbody>
       {% if storage.projects %}<tr><th scope="row">Alle Projekte</th>
         {% for key,label in columns %}<td><input type="checkbox" name="item" value="{{key}}:*" aria-label="{{label}} aller Projekte bereinigen" {% if (key,'*') in selected %}checked{% endif %}></td>{% endfor %}
       </tr>{% endif %}
       {% for project in storage.projects %}
-        <tr><th scope="row"><a href="{{project.url}}">{{project.name}}</a>{% if not project.enabled %}<span class="field-help"> · Pausiert</span>{% endif %}</th>
+        <tr data-maintenance-project><th scope="row" data-sort-value="{{project.name}}"><a href="{{project.url}}">{{project.name}}</a>{% if not project.enabled %}<span class="field-help"> · Pausiert</span>{% endif %}</th>
         {% for key,label in columns %}
-          <td><label class="check-label"><input type="checkbox" name="item" value="{{key}}:{{project.id}}" aria-label="{{label}} von {{project.name}} bereinigen" {% if (key,project.id) in selected %}checked{% endif %}>
+          <td data-sort-value="{{project.event_bytes if key == 'events' else project[key]}}"><label class="check-label"><input type="checkbox" name="item" value="{{key}}:{{project.id}}" aria-label="{{label}} von {{project.name}} bereinigen" {% if (key,project.id) in selected %}checked{% endif %}>
             <span>{% if key == 'events' %}{{project.event_bytes|storage_size}}<small>{{project.events}} {{'Eintrag' if project.events == 1 else 'Einträge'}}</small>{% else %}{{project[key]|storage_size}}{% if key == 'history' %}<small>{{project.runs}} {{'Prüfung' if project.runs == 1 else 'Prüfungen'}}</small>{% endif %}{% endif %}</span>
           </label></td>
         {% endfor %}</tr>

@@ -189,10 +189,17 @@ class MaintenanceChecks(unittest.TestCase):
         page = BeautifulSoup(client.get('/maintenance').text, 'html.parser')
         self.assertEqual(page.select_one('.nav-link[aria-current=page]').get_text(strip=True), 'Wartung & Bereinigung')
         self.assertEqual(len(page.select('.maintenance-table input[type=checkbox]')), 9)
+        self.assertEqual([b.get_text(strip=True) for b in page.select('button[type=button][data-maintenance-sort]')],
+                         ['Projekt', 'Originaldateien', 'Prüfverlauf', 'Protokolle'])
+        self.assertEqual(len(page.select('[data-maintenance-project] [data-sort-value]')), 8)
+        self.assertEqual(page.select_one('#neustart form')['action'], '/maintenance/preview#vorschau')
+        self.assertEqual(page.select_one('#neustart button').get_text(strip=True), 'Vorschau für das Zurücksetzen öffnen')
         csrf = client.cookies['kiwm_csrf']
         preview = client.post('/maintenance/preview', data={'csrf': csrf, 'kind': 'reset'})
         self.assertEqual(preview.status_code, 200)
+        self.assertEqual(len(store.rows('SELECT id FROM runs')), 3)
         form = BeautifulSoup(preview.text, 'html.parser').select_one('#vorschau form')
+        self.assertEqual(form.button.get_text(strip=True), 'Prüfverlauf aller Projekte löschen')
         fields = {node['name']: node['value'] for node in form.select('input[type=hidden]')}
         self.assertEqual(client.post('/maintenance/cleanup', data={**fields, 'csrf': 'bad'}).status_code, 403)
         self.assertEqual(client.post('/maintenance/cleanup', data={**fields, 'confirm': 'on'}).status_code, 400)

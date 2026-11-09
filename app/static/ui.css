@@ -236,6 +236,12 @@ html[data-motion=off] .notice-button{animation:none}
 .maintenance-storage dd{margin:0;font-weight:600}
 .maintenance-table{margin:1rem 0}
 .maintenance-table table{min-width:34rem}
+.maintenance-table .maintenance-sort{min-height:2rem;padding:0;border:0;background:transparent;color:inherit;font:inherit;letter-spacing:inherit;box-shadow:none}
+.maintenance-table .maintenance-sort:hover,.maintenance-table .maintenance-sort:active{color:var(--blue);text-decoration:underline;transform:none;box-shadow:none}
+.maintenance-table .maintenance-sort-arrow::before{content:'↕'}
+.maintenance-table th[aria-sort] .maintenance-sort{color:var(--blue)}
+.maintenance-table th[aria-sort=ascending] .maintenance-sort-arrow::before{content:'↑'}
+.maintenance-table th[aria-sort=descending] .maintenance-sort-arrow::before{content:'↓'}
 .maintenance-table th[scope=row]{text-transform:none;letter-spacing:normal;overflow-wrap:anywhere}
 .maintenance-table .check-label{margin:0;white-space:nowrap}
 .maintenance-table small{display:block;color:var(--subtle)}
