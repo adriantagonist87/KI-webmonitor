@@ -78,7 +78,9 @@ Das **Globale Dateiverzeichnis** bietet Suche und Sortierung über Projekte hinw
 - **E-Mail** liefert einen HTML-Bericht mit Textalternative. Unter **SMTP-Mailserver** lassen sich die Uhrzeit in `Europe/Berlin`, der Berichtszeitraum in Stunden oder Tagen und die Häufigkeit einstellen. Möglich sind tägliche, werktägliche, wöchentliche und monatliche Berichte sowie Stundenintervalle. Gespeicherte Einstellungen für SMTP und Telegram haben Vorrang vor den Stack-Vorgaben.
 - **Bericht und Verteiler** zeigen relevante Änderungen und eine Übersicht der Quellen mit und ohne Änderungen. Pro geänderter Quelle führt ein Originalquellenlink zur Webseite mit dem Eintrag. Die Quellennamen verlinken die überwachten Websites. Empfängerberichte lassen sich nach Projekten oder Tags eingrenzen. Die Adminansicht bietet Vorschauen und ein Versandarchiv.
 
-![HTML-Bericht mit lesendem Maskottchen, zwei relevanten Änderungen und verlinkter Quellenübersicht](docs/screenshots/wochenbericht.png)
+![HTML-Wochenbericht mit lesendem Maskottchen, zwei relevanten Änderungen und verlinkter Quellenübersicht in einem nachgestellten Outlook-Fenster](docs/screenshots/wochenbericht.png)
+
+*Nachgestelltes Outlook-Nachrichtenfenster mit fiktiven Adressen.* [Bild in voller Auflösung](docs/screenshots/wochenbericht.png)
 
 [Telegram und SMTP](docs/KOMMUNIKATION.md) · [Verteiler und Versandprotokoll](docs/VERTEILER.md)
 
