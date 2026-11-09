@@ -206,6 +206,46 @@ class DashboardBrowser(unittest.IsolatedAsyncioTestCase):
         await self.page.emulate_media(reduced_motion='reduce')
         self.assertNotEqual(await self.active().locator('.notice-button').evaluate('e=>getComputedStyle(e).animationName'),'none')
 
+    async def test_21_dashboard_review_confirms_visible_changes_and_keeps_a_newer_one(self):
+        def add_findings(run_id, findings):
+            stamp = store.now()
+            store.execute('INSERT INTO runs(id,project_id,started,finished,status,origin) VALUES(?,?,?,?,?,?)',
+                          (run_id, 'active', stamp, stamp, 'success', 'test'))
+            for finding in findings:
+                store.execute('INSERT INTO changes VALUES(?,?,?,?,?,?,?,?,?,?)',
+                              (finding, 'active', run_id, 'https://example.test/', 'Inhalt geändert',
+                               stamp, 'previous', 'current', '{}', finding))
+
+        add_findings('review-visible', ['review-one', 'review-two'])
+        await self.page.set_viewport_size({'width': 377, 'height': 850})
+        await self.page.reload(wait_until='networkidle')
+        card = self.active()
+        review = card.get_by_role('button', name='Alle Änderungen für Dashboard Test bestätigen')
+        self.assertTrue(await review.is_visible())
+        self.assertEqual(await review.locator('use').get_attribute('href'), '#i-check')
+        edit_box = await card.get_by_role('link', name='Dashboard Test bearbeiten').bounding_box()
+        review_box = await review.bounding_box()
+        self.assertGreater(review_box['x'], edit_box['x'])
+        self.assertAlmostEqual(review_box['y'], edit_box['y'], delta=2)
+        self.assertFalse(await self.page.locator('[data-project-id=paused] [data-review-form]').is_visible())
+        add_findings('review-newer', ['review-three'])
+
+        changes_filter = self.page.locator('[data-filter=attention]')
+        await changes_filter.click()
+        await review.click()
+        await card.get_by_role('link', name='1 Änderung erkannt').wait_for()
+        self.assertEqual({row['change_id'] for row in store.rows('SELECT change_id FROM change_reviews')},
+                         {'review-one', 'review-two'})
+        await review.click()
+        await card.wait_for(state='hidden')
+        self.assertEqual(await changes_filter.get_attribute('aria-pressed'), 'true')
+        self.assertEqual(await changes_filter.locator('b').inner_text(), '0')
+        await changes_filter.click()
+        self.assertTrue(await card.is_visible())
+        self.assertFalse(await review.is_visible())
+        self.assertEqual(await card.get_attribute('data-attention'), '0')
+        self.assertEqual(len(store.rows('SELECT change_id FROM change_reviews')), 3)
+
     async def test_17_request_failure_retains_last_confirmed_state(self):
         self.fail_post=True;await self.active().locator('.automation-toggle').click()
         await self.page.locator('.toast').wait_for();self.assertEqual(await self.active().get_attribute('data-enabled'),'1')

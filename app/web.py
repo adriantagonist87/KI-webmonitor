@@ -801,6 +801,11 @@ async def review(pid: str, request: Request):
     except ValueError:
         raise HTTPException(400, 'Ungültiger Prüfstand; Übersicht neu laden')
     attention.acknowledge(pid, dt.astimezone(timezone.utc).isoformat(), now())
+    if f.get('dashboard') == '1':
+        if 'application/json' in request.headers.get('accept', ''):
+            state = attention.summary(pid)
+            return {'id': pid, **{key: state[key] for key in ('attention_count', 'notice_count', 'review_through')}}
+        return redirect('/', 'reviewed')
     return redirect('/projects/' + pid, 'reviewed')
 
 @app.post('/projects/{pid}/run')

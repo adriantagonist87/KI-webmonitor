@@ -218,11 +218,16 @@ class UI(unittest.TestCase):
   chip=card.select_one('.change-pill')
   self.assertEqual(chip.get_text(strip=True),'1 Änderung erkannt')
   self.assertEqual(chip['href'],f'/projects/{pid}#changes')
+  form=card.select_one('[data-review-form]')
+  self.assertEqual(form.button.use['href'],'#i-check')
   self.assertEqual(self.history_links(pid)['file-version-after'].get_text(strip=True),'Änderungen erkannt')
-  attention.acknowledge(pid,pending['review_through'],now())
+  fields={field['name']:field['value'] for field in form.select('input')}
+  response=self.client.post(form['action'],data=fields,headers={'Accept':'application/json'})
+  self.assertEqual(response.json(),{'id':pid,'attention_count':0,'notice_count':0,'review_through':''})
   self.assertEqual(attention.summary(pid)['attention_count'],0)
   card=BeautifulSoup(self.client.get('/').text,'html.parser').select_one('[data-project-id="'+pid+'"]')
   self.assertIsNone(card.select_one('.change-pill'))
+  self.assertIsNone(card.select_one('[data-review-form]'))
   self.assertEqual(self.history_links(pid)['file-version-after'].get_text(strip=True),'Änderungen erkannt')
 
  def test_09_technical_uncertainty_and_visual_relevance_do_not_escalate(self):

@@ -370,6 +370,52 @@
       updateProjects();
     }));
     if (projects.length) updateProjects();
+    document.querySelectorAll('[data-review-form]').forEach(form => form.addEventListener('submit', async event => {
+      if (!window.fetch || !window.AbortController) return;
+      event.preventDefault();
+      const card = form.closest('[data-project]');
+      const button = form.querySelector('button');
+      if (button.disabled) return;
+      const focused = document.activeElement === button;
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      try {
+        const response = await fetch(form.action, {method:'POST', credentials:'same-origin', signal:controller.signal,
+          headers:{'Accept':'application/json'}, body:new URLSearchParams(new FormData(form))});
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        const changes = data.attention_count;
+        const notices = data.notice_count;
+        if (data.id !== card.dataset.projectId || ![changes, notices].every(n => Number.isSafeInteger(n) && n >= 0)
+            || typeof data.review_through !== 'string') throw new Error();
+        card.dataset.attention = changes ? '1' : '0';
+        card.dataset.notices = notices ? '1' : '0';
+        card.querySelector('.project-facts').classList.toggle('has-change', Boolean(changes));
+        const change = card.querySelector('[data-change-signal]');
+        change.hidden = !changes;
+        change.querySelector('span').textContent = `${changes} Änderung${changes === 1 ? '' : 'en'} erkannt`;
+        const notice = card.querySelector('[data-notice-signal]');
+        notice.hidden = !notices;
+        notice.querySelector('span').textContent = `${notices} Hinweis${notices === 1 ? '' : 'e'}`;
+        form.elements.namedItem('through').value = data.review_through;
+        form.hidden = !changes;
+        updateProjects();
+        if (focused && (form.hidden || card.hidden)) {
+          const next = card.hidden ? filters.find(filter => filter.dataset.filter === selected) : card.querySelector('.project-title a');
+          next?.focus({preventScroll:true});
+        }
+      } catch {
+        const toast = document.createElement('div'); toast.className = 'toast'; toast.setAttribute('role','alert');
+        toast.textContent = 'Änderungen konnten nicht bestätigt werden. Bitte erneut versuchen.';
+        document.body.append(toast); setTimeout(() => toast.remove(), 8000);
+      } finally {
+        clearTimeout(timeout);
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+      }
+    }));
     document.querySelectorAll('[data-automation-form]').forEach(form => form.addEventListener('submit', async event => {
       if (!window.fetch || !window.AbortController) return;
       event.preventDefault();

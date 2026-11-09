@@ -153,6 +153,7 @@ html[data-motion=off] .filter:is(.has-errors,.has-changes){background:var(--filt
 .project-facts.has-change>span:first-child{flex-basis:auto}
 .project-facts.has-change .project-signals{flex-wrap:wrap;max-width:100%;margin-left:auto;justify-content:flex-end}
 .project-actions>.automation-control{margin-inline-start:auto;min-width:0;max-width:calc(100% - 129px);flex:0 1 auto}
+.project-card[data-attention="1"] .project-actions>.automation-control{max-width:100%}
 button.automation-toggle{height:36px;min-height:36px;min-width:0;max-width:100%;padding:5px 8px;border-radius:8px;font-size:.78rem;line-height:1;gap:6px;white-space:nowrap;font-weight:600}
 .automation-toggle .icon{width:17px;height:17px;flex:0 0 17px}
 .automation-toggle [data-automation-label]{min-width:0;overflow:hidden;text-overflow:ellipsis}
