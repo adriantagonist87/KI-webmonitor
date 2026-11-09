@@ -77,6 +77,8 @@ def allowed(url, domains):
 
 def clean_url(url):
     u=urlsplit(urldefrag(url)[0])
+    if ' ' in u.path:
+        u=u._replace(path=u.path.replace(' ', '%20'))
     pairs=parse_qsl(u.query,keep_blank_values=True)
     transient={'sid','sessionid','jsessionid','sinst','nonce','checksum','_csrf','csrf','csrftoken'}
     if any(k.casefold() in ('auth-method','userid') for k,v in pairs):transient.update({'auth-method','userid','timestamp','requestid','appid'})
@@ -472,12 +474,7 @@ def previous_in_scope(project_id, rid, url, scope):
     previous=next((candidate for candidate in candidates if usable_snapshot(candidate)),None)
     if not previous and scope is None and urlsplit(url).path.lower().endswith(DOC_EXT):
         # Compare numeric cache-token aliases without changing the requested/cited URL.
-        base=urlsplit(url)._replace(query='',fragment='').geturl()
-        aliases=rows("SELECT s.id,s.url FROM snapshots s JOIN runs r ON r.id=s.run_id WHERE s.project_id=? AND s.kind='document' AND s.run_id<>? AND r.status IN ('success','partial') AND (s.url=? OR s.url LIKE ?) ORDER BY s.captured DESC",(project_id,rid,base,base+'?%'))
-        for alias in aliases:
-            if document_identity(alias['url'])==document_identity(url):
-                previous=one('SELECT * FROM snapshots WHERE id=?',(alias['id'],))
-                break
+        previous=previous_document(project_id,rid,url)
     if not previous or not scope or not previous.get('html'): return previous,False
     try:
         saved=(DATA/previous['html']).read_text()
@@ -512,9 +509,15 @@ def _visual_scope_name(html):
 def previous_document(project_id,rid,url):
     previous=one("SELECT s.* FROM snapshots s JOIN runs r ON r.id=s.run_id WHERE s.project_id=? AND s.url=? AND s.kind='document' AND s.run_id<>? AND r.status IN ('success','partial') ORDER BY s.captured DESC,s.rowid DESC LIMIT 1",(project_id,url,rid))
     if previous:return previous
-    base=urlsplit(url)._replace(query='',fragment='').geturl()
-    aliases=rows("SELECT s.* FROM snapshots s JOIN runs r ON r.id=s.run_id WHERE s.project_id=? AND s.kind='document' AND s.run_id<>? AND r.status IN ('success','partial') AND (s.url=? OR s.url LIKE ?) ORDER BY s.captured DESC,s.rowid DESC",(project_id,rid,base,base+'?%'))
-    return next((s for s in aliases if document_identity(s['url'])==document_identity(url)),None)
+    base=urlsplit(url)._replace(query='',fragment='')
+    encoded=base._replace(path=base.path.replace(' ', '%20')).geturl()
+    legacy=base._replace(path=base.path.replace('%20', ' ')).geturl()
+    aliases=rows("""SELECT s.* FROM snapshots s JOIN runs r ON r.id=s.run_id
+        WHERE s.project_id=? AND s.kind='document' AND s.run_id<>? AND r.status IN ('success','partial')
+        AND (s.url IN (?,?) OR s.url LIKE ? OR s.url LIKE ?) ORDER BY s.captured DESC,s.rowid DESC""",
+        (project_id,rid,encoded,legacy,encoded+'?%',legacy+'?%'))
+    identity=document_identity(url)
+    return next((s for s in aliases if document_identity(s['url'])==identity),None)
 
 
 def archive_document_hash(project,rid,url,raw,suffix=''):
@@ -600,7 +603,8 @@ def archive(project, rid, url, kind, raw, text, links=None, screenshot=None, htm
         if previous['text_sha256'] != tsha:
             kinds.append('Inhalt geändert')
             evidence['text_diff'] = diff_text(previous['text'], text)
-        old_links = set(json.loads(previous['links']))
+        # Older captures kept literal path spaces from HTML href attributes.
+        old_links = {clean_url(link) if ' ' in link else link for link in json.loads(previous['links'])}
         if old_links != set(links):
             kinds.append('Links geändert')
             evidence['links_added'] = sorted(set(links) - old_links)

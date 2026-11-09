@@ -7,7 +7,7 @@ DOCUMENT_LIMIT = 128
 
 
 def document_identity(url: str) -> str:
-    """Comparison key only: discard a fragment and numeric epoch cache `ts`.
+    """Comparison key only: encode path spaces, discard a fragment and epoch `ts`.
 
     All other query pairs, including blanks, duplicates and version fields, keep
     their order and values. Callers must retain the original URL for downloading,
@@ -16,7 +16,7 @@ def document_identity(url: str) -> str:
     parts = urlsplit(url)
     pairs = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True)
              if not (key == 'ts' and value.isascii() and value.isdigit() and 9 <= len(value) <= 13)]
-    return parts._replace(query=urlencode(pairs), fragment='').geturl()
+    return parts._replace(path=parts.path.replace(' ', '%20'), query=urlencode(pairs), fragment='').geturl()
 
 
 def _url(value):

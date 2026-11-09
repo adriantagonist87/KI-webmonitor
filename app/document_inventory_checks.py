@@ -163,6 +163,19 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(set(collect_documents({'page':source},allowed,EXTENSIONS)),
             {BASE+'download?id=1',BASE+'download?id=2',BASE+'download?id=3',BASE+'invalid-name'})
 
+    def test_25_captured_download_paths_encode_literal_spaces_without_double_encoding(self):
+        html = '''<main><h1>Downloads</h1>
+          <a href="/BOS 2025/BOS_2025.pdf">Empfehlung</a>
+          <a href="/BOS%202025/BOS_2025.pdf#page=2">Gleiche Datei</a>
+          <a href="/LAN 2021/Anlage 2.pdf?version=2025%2F04&amp;tag=a+b">Anlage</a>
+          <a href="https://other.example/BOS 2025/foreign.pdf">Fremd</a>
+        </main>'''
+        captured = engine.editorial_content(str(engine.capture_html_copy(html, BASE)), BASE)
+        self.assertEqual(collect_documents({'page': captured}, allowed, EXTENSIONS), {
+            BASE + 'BOS%202025/BOS_2025.pdf': 'Empfehlung',
+            BASE + 'LAN%202021/Anlage%202.pdf?version=2025%2F04&tag=a+b': 'Anlage',
+        })
+
     def test_20_declared_extensionless_files_obey_url_safety_and_do_not_use_label_keywords(self):
         source={'metadata':{'links':[
             {'url':BASE+'download?id=1#part','label':'Report','download':True},
@@ -318,9 +331,9 @@ class ArchiveTests(unittest.TestCase):
         self.assertTrue((store.DATA / store.one('SELECT file FROM snapshots WHERE url=?', (old_url,))['file']).is_file())
 
     def test_13_cache_query_change_uses_latest_accepted_document_without_rewriting_urls(self):
-        old_url = BASE + 'rule.pdf?v=2026&ts=1700000000'
-        next_url = BASE + 'rule.pdf?v=2026&ts=1700000001'
-        changed_url = BASE + 'rule.pdf?v=2026&ts=1700000002'
+        old_url = BASE + 'technical rule.pdf?v=2026&ts=1700000000'
+        next_url = BASE + 'technical%20rule.pdf?v=2026&ts=1700000001'
+        changed_url = BASE + 'technical%20rule.pdf?v=2026&ts=1700000002'
         raw = pdf('Deadline 30 days.')
         self.run_row('cache-first')
         first = engine.archive(self.project, 'cache-first', old_url, 'document', raw,
@@ -347,7 +360,7 @@ class ArchiveTests(unittest.TestCase):
     def test_14_matching_scope_uses_canonical_archive_without_missing_selector_ancestors(self):
         import site_privacy
         title='Norm 30 Tage. Kunde 987654321; PLZ: 54321.'
-        links=[(BASE+'old.pdf','Bestehend')]
+        links=[(BASE+'alte Datei.pdf','Bestehend')]
         self.run_row('scope-first')
         token=site_privacy.bind(None)
         try:
@@ -369,7 +382,7 @@ class ArchiveTests(unittest.TestCase):
             self.assertNotIn('PLZ: 54321',previous['text'])
             self.assertEqual(previous['text_sha256'],store.digest(previous['text']))
             self.assertEqual(json.loads(previous['links']),[links[0][0]])
-            self.scoped_page('scope-same',title,links)
+            self.scoped_page('scope-same',title,[(BASE+'alte%20Datei.pdf','Bestehend')])
             self.assertEqual(store.rows('SELECT * FROM changes WHERE run_id=?',('scope-same',)),[])
             mismatch,changed=engine.previous_in_scope(self.project['id'],'scope-same',BASE,'css:article')
             self.assertIsNone(mismatch)
