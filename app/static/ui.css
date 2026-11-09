@@ -133,12 +133,15 @@ html[data-theme=dark] .project-card.is-paused::before{background:#777}
 .retry-status[hidden]{display:none}.retry-status>.icon{width:12px;height:12px;flex:0 0 12px;margin-top:1px;color:var(--subtle)}
 .retry-status [data-retry-label]{min-width:0;overflow-wrap:normal}.badge.cancelled{background:var(--soft);border-color:var(--stroke);color:var(--subtle)}
 
-/* Dashboard controls: one gentle red cycle per second; text stays legible. */
-@keyframes dashboard-error-fade{0%,100%{background:var(--surface);border-color:var(--stroke2);box-shadow:none}50%{background:var(--red-tint);border-color:var(--red);box-shadow:0 0 0 3px var(--red-tint)}}
-.filter[data-filter=error].has-errors{animation:dashboard-error-fade 1s ease-in-out infinite;color:var(--red)}
+/* Dashboard signals use a soft color pulse while their count is positive. */
+@keyframes dashboard-filter-fade{0%,100%{background:var(--filter-base,var(--surface));border-color:var(--filter-border,var(--stroke2));box-shadow:none}50%{background:var(--filter-tint);border-color:var(--filter-accent);box-shadow:0 0 0 3px var(--filter-tint)}}
+.filter.has-errors{--filter-accent:var(--red);--filter-tint:var(--red-tint)}
+.filter.has-changes{--filter-accent:var(--amber);--filter-tint:var(--amber-tint)}
+.filter:is(.has-errors,.has-changes){animation:dashboard-filter-fade 1s ease-in-out infinite;color:var(--filter-accent)}
+.filter.has-changes[aria-pressed=true]{--filter-base:var(--blue-tint);--filter-border:var(--blue);outline:2px solid var(--blue);outline-offset:1px}
 .filter[data-filter=paused].has-paused{background:var(--amber-tint);border-color:var(--amber-border);color:var(--amber)}
 .filter[data-filter=paused].has-paused[aria-pressed=true]{border-color:var(--amber);box-shadow:0 0 0 2px var(--amber-tint)}
-html[data-motion=off] .filter.has-errors{background:var(--red-tint);border-color:var(--red)}
+html[data-motion=off] .filter:is(.has-errors,.has-changes){background:var(--filter-tint);border-color:var(--filter-accent)}
 .project-card{container-type:inline-size}
 .project-facts{display:flex;flex-wrap:nowrap;min-height:28px;gap:8px;align-items:center;line-height:1.4}
 .project-facts>span:first-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

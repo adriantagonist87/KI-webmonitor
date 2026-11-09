@@ -346,6 +346,7 @@
         const count = base.filter(card => matchesStatus(card, button.dataset.filter)).length;
         if (output) output.textContent = String(count);
         button.setAttribute('aria-pressed', String(button.dataset.filter === selected));
+        button.classList.toggle('has-changes', button.dataset.filter === 'attention' && count > 0);
         button.classList.toggle('has-errors', button.dataset.filter === 'error' && count > 0);
         button.classList.toggle('has-paused', button.dataset.filter === 'paused' && count > 0);
       });

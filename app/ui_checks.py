@@ -68,6 +68,7 @@ class UI(unittest.TestCase):
   self.assertEqual(card['style'],'--project-color:#0891b2')
   self.assertEqual(card.h2.get_text(),'Legacy Alias');self.assertEqual(card['data-attention'],'1')
   self.assertEqual(len(doc.select('.filter-bar [data-filter]')),6);self.assertEqual(len(doc.select('.filter-bar .icon')),6)
+  self.assertEqual(doc.select_one('[data-filter="attention"].has-changes b').get_text(),'1')
   self.assertIsNone(doc.select_one('.metrics'));self.assertIsNone(doc.select_one('.alert-red'))
   self.assertIn('1',card.select_one('.change-pill').get_text())
   self.assertEqual([o['value'] for o in doc.select('[data-tag-filter] option')],['']+[t['key'] for t in tag_registry.all_tags()])
