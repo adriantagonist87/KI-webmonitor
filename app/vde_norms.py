@@ -6,6 +6,7 @@ from playwright.async_api import expect
 
 import site_privacy
 import site_safety
+import store
 
 URL = 'https://www.normenbibliothek.de/xopp/normenbibliothek/start.xav'
 FILTER = 'Normen'
@@ -18,10 +19,32 @@ def matches(url):
     return url == URL
 
 
+def library_page(url):
+    if not isinstance(url, str):
+        return False
+    try:
+        return urlsplit(url)._replace(query='', fragment='').geturl() == URL
+    except ValueError:
+        return False
+
+
+def library_tab(pages):
+    return next((page for page in reversed(pages) if library_page(page.url)), None)
+
+
+def retained_tab(pages):
+    """Keep one library tab for opted-in projects, without trusting its login state."""
+    page = library_tab(pages)
+    if page is None:
+        return None
+    enabled = store.one("SELECT 1 FROM projects p JOIN state s ON s.key='browser_flow:'||p.id "
+                        "WHERE p.url=? AND s.value='vde_norms' LIMIT 1", (URL,))
+    return page if enabled else None
+
+
 async def check_page(page):
     await site_safety.check_page(page)
-    if (urlsplit(page.url)._replace(query='', fragment='').geturl() != URL
-            or await site_privacy.contains_auth_form(page)):
+    if not library_page(page.url) or await site_privacy.contains_auth_form(page):
         raise RuntimeError('Die angemeldete VDE-NormenBibliothek ist nicht sichtbar.')
 
 

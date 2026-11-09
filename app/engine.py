@@ -835,10 +835,14 @@ async def monitor(project, rid):
         elif visual_mode:
             # Keep an already authenticated tab, including its sessionStorage.
             matching=[p for p in old_pages if urlsplit(p.url).hostname==urlsplit(project['url']).hostname]
-            page=matching[-1] if matching else await ctx.new_page()
+            retained=vde_norms.library_tab(matching) if vde_flow else None
+            page=retained or (matching[-1] if matching else await ctx.new_page())
         else:
             page=await ctx.new_page()
-            for other in old_pages: await other.close()
+            retained=vde_norms.retained_tab(old_pages)
+            for other in old_pages:
+                if other is not retained:
+                    await other.close()
         await page.bring_to_front()
         config=site_access.public_config(project['id'])
         safety_guard=site_safety.current()

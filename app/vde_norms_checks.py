@@ -1,7 +1,8 @@
 """Test the project opt-in and the observed VDE controls in isolated Brave."""
 import os
 import unittest
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from playwright.async_api import async_playwright
 
@@ -21,6 +22,21 @@ class VdeFlowConfiguration(unittest.TestCase):
             browser_mode.validate(value, {**project, 'url': 'https://example.org'})
         with self.assertRaises(ValueError):
             browser_mode.validate({**value, 'mode': 'standard'}, project)
+
+    def test_retains_one_library_tab_only_for_an_opted_in_project(self):
+        older = SimpleNamespace(url=vde_norms.URL)
+        current = SimpleNamespace(url=vde_norms.URL+'?nonce=synthetic#top')
+        entry = SimpleNamespace(url='https://www.normenbibliothek.de/')
+        foreign = SimpleNamespace(url='https://example.org/xopp/normenbibliothek/start.xav')
+        pages = [older, current, entry, foreign]
+        with patch('vde_norms.store.one', return_value={'enabled': 1}) as lookup:
+            self.assertIs(vde_norms.retained_tab(pages), current)
+            self.assertEqual(lookup.call_args.args[1], (vde_norms.URL,))
+        with patch('vde_norms.store.one', return_value=None):
+            self.assertIsNone(vde_norms.retained_tab(pages))
+        with patch('vde_norms.store.one') as lookup:
+            self.assertIsNone(vde_norms.retained_tab([entry, foreign]))
+            lookup.assert_not_called()
 
 
 PAGE = '''<!doctype html><html><head><meta charset="utf-8"><style>
