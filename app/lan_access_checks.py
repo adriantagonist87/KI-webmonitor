@@ -10,7 +10,9 @@ os.environ['DATA_DIR'] = scratch.name
 os.environ['KIWM_ADMIN_USERNAME'] = 'synthetic-admin'
 os.environ['KIWM_ADMIN_PASSWORD'] = 'SYNTHETIC-LAN-PASSWORD'
 import lan_access
+import store
 import web
+from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 from fastapi import Request
 
@@ -61,6 +63,22 @@ class LanAccess(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(next(c for c in client.cookies.jar if c.name == 'kiwm_csrf').secure)
         self.assertIn('/browser/vnc.html?', response.json()['browser'])
+
+    def test_macro_picker_uses_browser_page_outside_novnc_namespace(self):
+        client = self.client()
+        store.init()
+        pid = 'lan-macro-project'
+        store.execute('INSERT INTO projects(id,name,url,prompt,domains,cron,enabled,next_due,created) VALUES(?,?,?,?,?,?,0,?,?)',
+                      (pid, 'LAN test project', 'https://example.org/', 'Inspect page', 'example.org',
+                       '0 6 * * *', store.now(), store.now()))
+        self.addCleanup(store.execute, 'DELETE FROM projects WHERE id=?', (pid,))
+        page = BeautifulSoup(client.get('/browser').text, 'html.parser')
+        picker = page.select_one('#macro-project')
+        self.assertEqual(picker.find_parent('form')['action'], '/browser')
+        response = client.get('/browser', params={picker['name']: pid})
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers['location'], f'/projects/{pid}/macros')
+        self.assertIn('Aufnahme starten', client.get(response.headers['location']).text)
 
     def test_unknown_host_and_forwarded_host_not_trusted(self):
         client = self.client()

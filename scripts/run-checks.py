@@ -29,7 +29,7 @@ from urllib.parse import urlsplit
 # Baseline: work/retry-task-state.json regression.suite_counts, 387 tests.
 SUITES = {
     'admin_auth_checks': 25,
-    'lan_access_checks': 10,
+    'lan_access_checks': 11,
     'public_access_checks': 9,
     'dashboard_control_checks': 20,
     'communication_checks': 37,

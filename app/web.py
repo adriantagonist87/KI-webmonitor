@@ -968,13 +968,10 @@ async def download_stored_file(sid: str):
     return DocumentDownloadResponse(download)
 
 @app.get('/browser')
-async def browser_help(request: Request):
+async def browser_help(request: Request, macro_project: str | None = None):
+    if macro_project:
+        return redirect(detail_path(project(macro_project)['id']) + '/macros')
     return render(request, 'browser', macro_projects=rows('SELECT id,name FROM projects ORDER BY name'))
-
-
-@app.get('/browser/macros')
-async def browser_macro_project(pid: str):
-    return redirect(detail_path(project(pid)['id']) + '/macros')
 
 
 def macro_page(request, p, error=''):
