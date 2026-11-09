@@ -214,10 +214,14 @@ class UI(unittest.TestCase):
   home=BeautifulSoup(self.client.get('/').text,'html.parser')
   card=home.select_one('[data-project-id="'+pid+'"]')
   self.assertEqual(card['data-attention'],'1')
-  self.assertIn('1 Änderung',card.select_one('.change-pill').get_text())
+  chip=card.select_one('.change-pill')
+  self.assertEqual(chip.get_text(strip=True),'1 Änderung erkannt')
+  self.assertEqual(chip['href'],f'/projects/{pid}#changes')
   self.assertEqual(self.history_links(pid)['file-version-after'].get_text(strip=True),'Änderungen erkannt')
   attention.acknowledge(pid,pending['review_through'],now())
   self.assertEqual(attention.summary(pid)['attention_count'],0)
+  card=BeautifulSoup(self.client.get('/').text,'html.parser').select_one('[data-project-id="'+pid+'"]')
+  self.assertIsNone(card.select_one('.change-pill'))
   self.assertEqual(self.history_links(pid)['file-version-after'].get_text(strip=True),'Änderungen erkannt')
 
  def test_09_technical_uncertainty_and_visual_relevance_do_not_escalate(self):
