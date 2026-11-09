@@ -1413,8 +1413,13 @@ async def make_report(test=False,distribution_id=None):
             projects=rows("SELECT p.*,(SELECT count(*) FROM runs WHERE project_id=p.id AND status='success') AS successes FROM projects p ORDER BY name")
             for p in projects:p['baseline']=p['successes']<=1
             proof_runs=sorted({change['run_id'] for change in changes})
-            source_snapshots=rows('SELECT project_id,run_id,kind,url,links FROM snapshots WHERE run_id IN (SELECT value FROM json_each(?))',
-                                  (json.dumps(proof_runs),)) if proof_runs else []
+            previous_snapshots=sorted({change['previous_id'] for change in changes if change['previous_id']})
+            source_snapshots=rows("""SELECT s.id,s.project_id,s.run_id,s.kind,s.url,s.links,s.captured
+                FROM snapshots s JOIN projects p ON p.id=s.project_id
+                WHERE s.run_id IN (SELECT value FROM json_each(?))
+                OR s.id IN (SELECT value FROM json_each(?))
+                OR (s.kind='document' AND s.url=p.url)""",
+                (json.dumps(proof_runs),json.dumps(previous_snapshots)))
             model=email_reports.build_model(projects,runs,changes,rows('SELECT * FROM tags ORDER BY key'),start.isoformat(),end.isoformat(),source_snapshots=source_snapshots)
             model=await email_reports.compact_headlines(model,llm,settings().get('analysis_model'))
             rid=uid();items=report_batches.records(rid,key,now(),model,{p['id']:project_icons.get(p['id']) for p in projects},test,distribution_id)

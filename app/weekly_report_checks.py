@@ -71,10 +71,12 @@ class WeeklyReport(unittest.TestCase):
         bundle=reports.render(model(data));soup=BeautifulSoup(bundle['html'],'html.parser')
         self.assertFalse(soup.select('script,style,iframe,[onerror]'));self.assertIn('&lt;img',bundle['html']);self.assertNotIn('javascript:',bundle['html'])
         self.assertTrue(all(i['src'].startswith('cid:') for i in soup.select('img')))
-    def test_10_all_project_name_links_and_neutral_styles(self):
+    def test_10_project_links_and_neutral_styles(self):
         m=model();soup=BeautifulSoup(reports.render(m)['html'],'html.parser')
         for p in m['projects'].values():
-            a=soup.find('a',href=p['url']);self.assertEqual(a.get_text(),p['name']);self.assertIn('text-decoration:none',a['style'])
+            a=soup.find('a',href=p['url'])
+            self.assertEqual(a.get_text(),p['name'] if p['category']=='unchanged' else 'Originalquelle')
+            self.assertIn('text-decoration:none',a['style'])
         app_links=[a['href'] for a in soup.find_all('a') if a.get_text()=='Webmonitor ›']
         self.assertEqual(set(app_links),{ORIGIN+'/projects/'+str(i) for i in range(3)})
     def test_11_no_origin_no_local_app_links_and_secret_query_rejected(self):

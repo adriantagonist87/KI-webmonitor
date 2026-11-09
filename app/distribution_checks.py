@@ -66,31 +66,40 @@ class DistributionTests(unittest.TestCase):
         for canary in ('PRIVATE-TAG-CANARY','PRIVATE-PROJECT-CANARY','PRIVATE-CHANGE-CANARY','ADMIN-HINT-CANARY','ADMIN-ERROR-CANARY','ADMIN-NOTICE-PROJECT','ADMIN-FAILED-PROJECT','Hinweise','Webmonitor ›'):
             self.assertNotIn(canary,bundle['html']+bundle['text'])
 
-    def test_recipient_links_use_verified_originals_and_the_page_that_linked_them(self):
+    def test_recipient_links_use_one_readable_page_that_names_the_files(self):
         did=self.create()
         overview='https://public.example.org/veroeffentlichungen'
         article='https://public.example.org/artikel/neue-regel'
         document='https://files.example.org/neue-richtlinie.pdf'
+        attachment='https://files.example.org/download?id=77'
         app_link='https://monitor.example.org/artifacts/internal.pdf'
         navigation='https://public.example.org/abonnieren'
         project=store.one('SELECT * FROM projects WHERE id=?',('public',))
         run={'id':'proof','project_id':'public','started':store.now(),'status':'success'}
         changes=[{'project_id':'public','run_id':'proof','url':overview,'kind':'Inhalt geändert',
-                  'evidence':{'links_added':[article,document,app_link,navigation,document],
+                  'evidence':{'links_added':[article,document,attachment,app_link,navigation,document],
                               'ai_assessment':{'relevance':'relevant','reason':'Neue Richtlinie veröffentlicht.'}}}]
         snapshots=[{'project_id':'public','run_id':'proof','kind':'page','url':url,'links':json.dumps(links)}
-                   for url,links in ((overview,[article,document,app_link,navigation]),(article,[]))]
+                   for url,links in ((overview,[article,document,attachment,app_link,navigation]),
+                                     (article,[document,attachment]))]
+        snapshots.append({'project_id':'public','run_id':'proof','kind':'document','url':attachment,'links':'[]'})
         model=email_reports.build_model([project],[run],changes,self.tags,store.now(),store.now(),
                                         base_url='https://monitor.example.org',source_snapshots=snapshots)
         filtered,_=email_reports.for_distribution(model,lists.get(did))
         filtered['projects']['public']['app_url']='https://monitor.example.org/runs/proof'
         bundle=email_reports.render(filtered)
         anchors=BeautifulSoup(bundle['html'],'html.parser').select('a[href]')
-        self.assertCountEqual([a['href'] for a in anchors],[overview,article,document])
-        self.assertEqual([a.get_text() for a in anchors[1:]],['Originalquelle 1','Originalquelle 2'])
-        self.assertIn(document,bundle['text']);self.assertIn(article,bundle['text'])
+        self.assertEqual([(a['href'],a.get_text()) for a in anchors],[(article,'Originalquelle')])
+        self.assertIn(article,bundle['text'])
+        for url in (overview,document,attachment,navigation):
+            self.assertNotIn(url,bundle['html']+bundle['text'])
         self.assertNotIn('monitor.example.org',bundle['html']+bundle['text'])
-        self.assertIn('https://monitor.example.org/projects/public',email_reports.render(model)['html'])
+        admin=BeautifulSoup(email_reports.render(model)['html'],'html.parser')
+        admin_rows=admin.select('tr[data-project-id="public"]')
+        self.assertEqual(len(admin_rows),2)
+        for row in admin_rows:
+            self.assertEqual([a['href'] for a in row.select('a[href]')],
+                             [article,'https://monitor.example.org/projects/public'])
 
     def test_old_recipient_links_are_filtered_at_delivery_preview_and_eml(self):
         _,children=self.batch();child=children[0];rid=child['id']
@@ -114,6 +123,24 @@ class DistributionTests(unittest.TestCase):
             self.assertNotIn('Analyse öffnen',part)
         self.assertIn('https://public.example.org/',html)
         self.assertEqual(path.read_text(encoding='utf-8'),legacy)
+
+    def test_removed_document_uses_its_archived_publication_page(self):
+        overview='https://public.example.org/'
+        article=overview+'artikel/richtlinie'
+        document=overview+'richtlinie%2Epdf'
+        change={'project_id':'public','run_id':'proof','url':article,'kind':'Links geändert',
+                'previous_id':'old-page','current_id':'new-page','evidence':{'links_removed':[document],
+                'ai_assessment':{'relevance':'relevant','reason':'Richtlinie entfernt.'}}}
+        snapshots=[{'id':sid,'project_id':'public','run_id':run,'kind':'page','url':url,'links':json.dumps(links)}
+                   for sid,run,url,links in (('old-page','prior',article,[document]),
+                                              ('new-page','proof',article,[]),
+                                              ('overview','proof',overview,[article]))]
+        project=store.one('SELECT * FROM projects WHERE id=?',('public',))
+        model=email_reports.build_model([project],[],[change],self.tags,store.now(),store.now(),
+                                        source_snapshots=snapshots)
+        bundle=email_reports.render(model)
+        self.assertEqual(model['projects']['public']['source_page'],article)
+        self.assertNotIn(document,bundle['html']+bundle['text'])
     def test_08_explicit_project_is_in_a_neutral_group(self):
         did=self.create(tag_ids=[],project_ids=['quiet']);model,_=email_reports.for_distribution(self.model(),lists.get(did))
         self.assertEqual([g['name'] for g in model['groups']],['Ausgewählte Projekte']);self.assertEqual(set(model['projects']),{'quiet'})

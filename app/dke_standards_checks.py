@@ -133,7 +133,7 @@ class DKEChecks(unittest.IsolatedAsyncioTestCase):
         model = email_reports.build_model(store.rows('SELECT * FROM projects'), [run], changes, [],
                                           run['started'], run['finished'])
         self.assertEqual(model['projects']['dke']['category'], 'changed')
-        self.assertEqual(model['projects']['dke']['source_urls'], [new['url']])
+        self.assertEqual(model['projects']['dke']['source_page'], dke.SOURCE)
         await self.run_project('2026-11', quarter=[old])
         await self.run_project('2026-11', monthly=[{**new, 'url':new['url'].replace('456', '987')}], quarter=[old])
         self.assertEqual(len(store.rows('SELECT * FROM changes')), 1)

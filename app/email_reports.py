@@ -2,9 +2,10 @@
 import asyncio,copy,json,math,os,re
 from datetime import datetime
 from html import escape
-from urllib.parse import urlsplit,parse_qsl
+from urllib.parse import urlsplit,parse_qsl,unquote
 from bs4 import BeautifulSoup
-from document_types import DOC_EXT
+from document_inventory import document_identity
+from document_types import EXTENSIONS
 from report_render import render_report
 from report_images import Images,validate as validate_images,CID
 from project_meta import normalize_tags,normalize_color
@@ -17,6 +18,7 @@ COLOR='#526580'
 LINK_STYLE='color:'+COLOR+';text-decoration:none;'
 PRIVATE_KEYS={'token','password','passwort','api_key','apikey','access_token','authorization','abonummer','plz','secret'}
 URL_TEXT=re.compile(r'https?://[^\s<>"\']+',re.I)
+FILE_SUFFIXES=tuple(EXTENSIONS)
 
 def plain(value,limit=180):
     soup=BeautifulSoup(str(render_report(str(value or ''))),'html.parser')
@@ -95,41 +97,70 @@ def _sequence(value):
     return value if isinstance(value,(list,tuple)) else ()
 
 
-def _source_links(changes,snapshots,overview,blocked):
-    originals={};pages=set()
+def _file_url(url, files):
+    return (unquote(urlsplit(url).path).rstrip('/').casefold().endswith(FILE_SUFFIXES)
+            or document_identity(url) in files)
+
+
+def _website(value, blocked, files=()):
+    url = _external_source(value, blocked)
+    return url if url and not _file_url(url, files) else ''
+
+
+def _source_page(changes, snapshots, previous, overview, blocked, files):
+    pages = {}
     for change in changes:
-        evidence=_evidence(change)
-        current=snapshots.get((change['project_id'],change.get('run_id')),[])
-        observed={row['url'] for row in current}
-        candidates=[]
-        collection=evidence.get('collection') or {}
-        if isinstance(collection,dict):
+        evidence = _evidence(change)
+        current = snapshots.get((change['project_id'], change.get('run_id')), [])
+        earlier = previous.get(change.get('previous_id'))
+        rows = [*current, earlier] if earlier and earlier['project_id'] == change['project_id'] else current
+        candidates = [change.get('url'), *_sequence(evidence.get('links_added')), *_sequence(evidence.get('links_removed'))]
+        collection = evidence.get('collection')
+        if isinstance(collection, dict):
             for key in ('added','updated'):
                 candidates.extend(item.get('url') for item in _sequence(collection.get(key)) if isinstance(item,dict))
-        for value in _sequence(evidence.get('links_added')):
-            if (url:=_external_source(value,blocked)) and (url in observed or urlsplit(url).path.lower().endswith(DOC_EXT)):
-                candidates.append(url)
-        candidates.append(change.get('url'))
-        direct={url for value in candidates if (url:=_external_source(value,blocked)) and url!=overview}
-        found_pages={url for row in current if row['kind']=='page' and direct.intersection(row['links'])
-                     and (url:=_external_source(row['url'],blocked))}
-        pages.update(found_pages)
-        for value in candidates:
-            url=_external_source(value,blocked)
-            if url and url!=overview and url not in found_pages:
-                originals.setdefault(url,None)
-    nested=pages-{overview}
-    return list(originals),next(iter(nested)) if len(nested)==1 else overview
+        targets = {document_identity(url) for value in candidates if (url := _external_source(value, blocked))}
+        documents = {url for url in targets if _file_url(url, files)}
+        for row in rows:
+            if row['kind'] != 'page' or not (page := _website(row['url'], blocked, files)):
+                continue
+            linked = {document_identity(url) for value in row['links'] if (url := _external_source(value, blocked))}
+            matches = targets & linked
+            changed_page = page == change.get('url') or bool(row.get('id') and row['id'] == change.get('current_id'))
+            if not matches and not changed_page:
+                continue
+            entry = pages.setdefault(page, {'documents': set(), 'matches': set(), 'links': set(),
+                                            'changed': False, 'captured': ''})
+            entry['documents'].update(documents & matches)
+            entry['matches'].update(matches)
+            entry['links'].update(linked)
+            entry['changed'] |= changed_page
+            entry['captured'] = max(entry['captured'], row.get('captured') or '')
+
+    def priority(page):
+        entry = pages[page]
+        # Prefer a directly linking detail page reached through another candidate.
+        parents = sum(other != page and document_identity(page) in parent['links']
+                      and entry['documents'] <= parent['documents'] for other, parent in pages.items())
+        return (len(entry['documents']), parents if entry['documents'] else entry['changed'],
+                page != overview,
+                len(entry['matches']), entry['captured'], page)
+
+    return max(pages, key=priority, default=overview)
 
 
 def build_model(projects,runs,changes,tags,start,end,base_url=None,source_snapshots=()):
     base=public_origin(os.environ.get('KIWM_PUBLIC_URL','') if base_url is None else base_url)
     blocked=_app_hosts(base)
-    snapshots={}
+    snapshots,previous,files_by_project={},{},{}
     for row in source_snapshots:
         try:urls=json.loads(row['links'])
         except (TypeError,ValueError):urls=[]
-        snapshots.setdefault((row['project_id'],row['run_id']),[]).append({**row,'links':_sequence(urls)})
+        snapshot={**row,'links':_sequence(urls)}
+        snapshots.setdefault((row['project_id'],row['run_id']),[]).append(snapshot)
+        if row.get('id'):previous[row['id']]=snapshot
+        if row['kind']=='document' and (url:=safe_url(row['url'])):
+            files_by_project.setdefault(row['project_id'],set()).add(document_identity(url))
     runs=[r for r in runs if r['status']!='cancelled']
     relevant=[c for c in changes if (_evidence(c).get('ai_assessment') or {}).get('relevance')!='irrelevant']
     latest={};per_project={}
@@ -154,19 +185,19 @@ def build_model(projects,runs,changes,tags,start,end,base_url=None,source_snapsh
                 collection=e['collection'];fact['new_titles']=[plain(x.get('title'),150) for x in (collection.get('added') or [])[:3] if isinstance(x,dict)]
                 fact['updated_count']=len(collection.get('updated') or [])
             evidence.append(fact)
-        overview=_external_source(p['url'],blocked)
-        source_urls,source_page=_source_links(important,snapshots,overview,blocked)
-        views[p['id']]={'id':p['id'],'name':' '.join(str(p['name']).split()),'url':safe_url(p['url']),
-            'source_urls':source_urls,'source_page':source_page,
+        files=files_by_project.get(p['id'],set())
+        overview=_website(p['url'],blocked,files)
+        source_page=_source_page(selected,snapshots,previous,overview,blocked,files)
+        prestandards=[]
+        for change in important:
+            publication=_evidence(change).get('publication')
+            if change['kind']==PRESTANDARD_KIND and isinstance(publication,dict):
+                designation=plain(f"{publication.get('number','')}:{publication.get('edition','')}",140).strip(':')
+                if designation:prestandards.append('Vornorm '+designation)
+        views[p['id']]={'id':p['id'],'name':' '.join(str(p['name']).split()),'url':overview,
+            'source_page':source_page,'prestandards':list(dict.fromkeys(prestandards)),
             'app_url':base+detail_path(p['id']) if base else '', 'category':category,'message':message,
             'problem':problem if items else '', 'notice_count':len(items)-len(important),'change_count':len(important),'evidence':evidence}
-        source_labels={}
-        for change in important:
-            if change['kind']==PRESTANDARD_KIND and change['url'] in source_urls:
-                publication=_evidence(change).get('publication',{})
-                designation=plain(f"{publication.get('number','')}:{publication.get('edition','')}",140) if isinstance(publication,dict) else ''
-                source_labels[change['url']]=('Vornorm '+designation.strip(':')).strip()
-        if source_labels:views[p['id']]['source_labels']=source_labels
         try:names=normalize_tags(json.loads(p.get('tags','[]')) if isinstance(p.get('tags'),str) else p.get('tags',[]))
         except (ValueError,TypeError):names=[]
         for name in names or ['Ohne Tag']:
@@ -184,7 +215,8 @@ def build_model(projects,runs,changes,tags,start,end,base_url=None,source_snapsh
 async def compact_headlines(model,llm,model_name):
     """Optional local text condensation of existing evidence; failures retain facts."""
     result=copy.deepcopy(model)
-    candidates=[p for p in result['projects'].values() if p['evidence'] and not p.get('source_labels')]
+    candidates=[p for p in result['projects'].values()
+                if p['evidence'] and not any(fact['kind']==PRESTANDARD_KIND for fact in p['evidence'])]
     if not candidates or not model_name:return result
     try:
         async def work():
@@ -218,13 +250,12 @@ def for_distribution(model,distribution):
     views={};blocked=_app_hosts(model.get('base_url'))
     for pid in eligible:
         p=model['projects'][pid]
-        overview=_external_source(p.get('source_page') or p['url'],blocked)
-        views[pid]={'id':pid,'name':p['name'],'url':overview,'app_url':'','category':p['category'],
-                   'source_urls':[url for value in p.get('source_urls',[]) if (url:=_external_source(value,blocked)) and url!=overview],
+        overview=_website(p['url'],blocked)
+        source_page=_website(p.get('source_page') or overview,blocked)
+        views[pid]={'id':pid,'name':p['name'],'url':overview,'source_page':source_page,'app_url':'','category':p['category'],
                    'message':p['message'] if p['category']=='changed' else '',
-                   'problem':'','notice_count':0,'change_count':p['change_count'],'evidence':[]}
-        if p.get('source_labels'):
-            views[pid]['source_labels']={url:label for url,label in p['source_labels'].items() if url in views[pid]['source_urls']}
+                   'problem':'','notice_count':0,'change_count':p['change_count'],'evidence':[],
+                   'prestandards':p.get('prestandards',[])}
     groups=[];grouped=set()
     for original in model['groups']:
         if original.get('id') not in tag_ids:continue
@@ -248,7 +279,11 @@ def render(model,icons=None):
     images=Images();logo=images.logo();icons=icons or {}
     views=copy.deepcopy(model['projects'])
     blocked=_app_hosts(model.get('base_url'))
-    for pid,p in views.items():p['cid']=images.project(icons.get(pid))
+    for pid,p in views.items():
+        p['cid']=images.project(icons.get(pid))
+        p['url']=_website(p['url'],blocked)
+        p['name']=_strip_unapproved_urls(p['name'],set())
+        p['message']=_strip_unapproved_urls(p['message'],set())
     html=['<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wochenbericht · KI-Webmonitor</title></head>',
       '<body style="margin:0;padding:14px 0;background:#f1f4f8;color:#1c2c44;font-family:Arial,Helvetica,sans-serif;line-height:1.4"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">',
       '<table role="presentation" width="700" cellpadding="0" cellspacing="0" style="width:100%;max-width:700px;table-layout:fixed;background:#ffffff;border:1px solid #d8e1ed">',
@@ -256,11 +291,7 @@ def render(model,icons=None):
       '<tr><td style="padding:0 14px 10px;font-size:11px;color:'+COLOR+'">'+escape(model['period'])+'</td></tr>']
     c=model['counts'];recipient=model.get('audience')=='distribution'
     if recipient:
-        for p in views.values():
-            p['url']=_external_source(p['url'],blocked)
-            p['app_url']=''
-            p['name']=_strip_unapproved_urls(p['name'],set())
-            p['message']=_strip_unapproved_urls(p['message'],set())
+        for p in views.values():p['app_url']=''
     if recipient:
         text=['KI-Webmonitor – Wochenbericht',model['period'],f"{c['sources']} Quellen",f"{c['changed']} Änderungen · {c['unchanged']} unverändert",'']
     else:text=['KI-Webmonitor – Wochenbericht',model['period'],f"{c['sources']} überwachte Quellen · {c['checked']} geprüft · {c['successful']} erfolgreich · {c['failed']} aktuell fehlerhaft/unvollständig",f"{c['changed']} Änderungen · {c['notices']} Hinweise · {c['unchanged']} unverändert",'']
@@ -283,19 +314,18 @@ def render(model,icons=None):
                     html.append('<td width="33.33%" valign="top" style="padding-right:8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:11px;line-height:16px;color:'+COLOR+'">')
                     for p in rows[column*height:(column+1)*height]:
                         html.append('<tr data-project-id="'+escape(str(p['id']),quote=True)+'" data-category="unchanged"><td width="22" valign="top" style="padding:0 0 6px"><img src="cid:'+p['cid']+'" width="16" height="16" alt="" style="display:block;border:0"></td><td valign="top" style="padding:0 0 6px;overflow-wrap:anywhere">'+link(p['url'],p['name'])+'</td></tr>')
-                        text.extend([p['name']+' · '+p['url'],'Keine relevanten Änderungen.'])
+                        text.extend([p['name']+(' · '+p['url'] if p['url'] else ''),'Keine relevanten Änderungen.'])
                     html.append('</table></td>')
                 html.append('</tr></table></td></tr>');continue
             for p in rows:
-                source_labels=p.get('source_labels',{})
-                originals=tuple(dict.fromkeys(url for value in _sequence(p.get('source_urls'))
-                                  if (url:=_external_source(value,blocked)) and url!=p['url'] and (recipient or url in source_labels)))
-                links=[(url,source_labels.get(url) or 'Originalquelle' + (f' {n}' if len(originals)>1 else '')) for n,url in enumerate(originals,1)]
-                source_line=' · '.join(link(url,label) for url,label in links)
+                source=_website(p.get('source_page') or p['url'],blocked)
+                source_line=link(source,'Originalquelle') if source else ''
+                prestandards=_strip_unapproved_urls(' · '.join(_sequence(p.get('prestandards'))),set())
                 app_link='<td width="90" valign="top" align="right">'+link(p['app_url'],'Webmonitor ›')+'</td>' if p['app_url'] else ''
-                html.append('<tr data-project-id="'+escape(str(p['id']),quote=True)+'" data-category="'+category+'"><td style="padding:7px 14px 8px;border-bottom:1px solid #d8e1ed"><p style="font-size:13px;font-weight:700;line-height:18px;margin:0 0 4px">'+escape(p['message'])+'</p><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:11px;color:'+COLOR+';line-height:16px"><tr><td width="22" valign="top"><img src="cid:'+p['cid']+'" width="16" height="16" alt="" style="display:block;border:0"></td><td valign="top">'+link(p['url'],p['name'])+(' · '+source_line if source_line else '')+(' <span style="font-size:10px;color:#906017">· Prüfproblem: '+escape(p['problem'])+'</span>' if p['problem'] else '')+'</td>'+app_link+'</tr></table></td></tr>')
-                text.extend([p['message'],p['name']+' · '+p['url']])
-                text.extend(label+' · '+url for url,label in links)
+                html.append('<tr data-project-id="'+escape(str(p['id']),quote=True)+'" data-category="'+category+'"><td style="padding:7px 14px 8px;border-bottom:1px solid #d8e1ed"><p style="font-size:13px;font-weight:700;line-height:18px;margin:0 0 4px">'+escape(p['message'])+'</p><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:11px;color:'+COLOR+';line-height:16px"><tr><td width="22" valign="top"><img src="cid:'+p['cid']+'" width="16" height="16" alt="" style="display:block;border:0"></td><td valign="top">'+escape(p['name'])+(' · '+source_line if source_line else '')+(' <span style="font-size:10px;color:#906017">· Prüfproblem: '+escape(p['problem'])+'</span>' if p['problem'] else '')+('<div>'+escape(prestandards)+'</div>' if prestandards else '')+'</td>'+app_link+'</tr></table></td></tr>')
+                text.extend([p['message'],p['name']])
+                if source:text.append('Originalquelle · '+source)
+                if prestandards:text.append(prestandards)
                 if p['problem']:text.append('Prüfproblem: '+p['problem'])
                 if p['app_url']:text.append('Webmonitor: '+p['app_url'])
             text.append('')
@@ -341,7 +371,7 @@ def message_parts(report,model=None):
     allowed=set()
     if model.get('audience')=='distribution':
         for p in model.get('projects',{}).values():
-            for value in (p.get('url'),*_sequence(p.get('source_urls'))):
+            for value in (p.get('url'),p.get('source_page'),*_sequence(p.get('source_urls'))):
                 if url:=_external_source(value,blocked):allowed.add(url)
     text='\n'.join(_strip_unapproved_urls(line,allowed) for line in text.split('\n') if not line.startswith('Webmonitor: '))
     soup=BeautifulSoup(html,'html.parser');dirty=False
