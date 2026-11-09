@@ -15,6 +15,12 @@ app-logo.png
   Original input SHA-256: cdd45a32bb34a37837398e3a58d8dab209ca3ab86ece10420d117bbe73f8da37
   Current PNG SHA-256: 501a6956fd304cbbd5162c29ac473dda0b47a4833c74cdfd78e04062f4133811
 
+login-mascot.png
+  Blue monster with glasses and papers from user-provided artwork, 2026-11-09.
+  ImageGen cutout with transparent exterior and opaque eye and papers, resized for the login page.
+  Original input SHA-256: 81949d4cd9ca0cb75b387d442a7583d581b477d1206b5b5c8c432ad4d4228c8c
+  Current PNG SHA-256: 351efa2f02e56c6f6b058ca36bf74b4862f1e1d7b0e3c0fa1e76ee36ffc755d3
+
 favicon.ico
   Size/format derivative of app-logo.png for browser icons.
   Preserves alpha transparency and aspect ratio with transparent square padding.

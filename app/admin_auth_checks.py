@@ -180,7 +180,7 @@ class LoginRoutes(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_24_static_login_assets_remain_public(self):
-        for path in ('/static/login.css', '/static/login.js', '/static/app-logo.png', '/favicon.ico'):
+        for path in ('/static/login.css', '/static/login.js', '/static/login-mascot.png', '/static/app-logo.png', '/favicon.ico'):
             self.assertEqual(self.client.get(path).status_code, 200)
         self.client.cookies.clear()
         for path in ('/favicon.ico', '/static/favicon.ico?v=old', web.APP_FAVICON_URL):
@@ -195,6 +195,7 @@ class LoginRoutes(unittest.TestCase):
                     self.assertEqual(response.headers['x-content-type-options'], 'nosniff')
         login = self.client.get('/login')
         self.assertIn(f'href="{web.APP_FAVICON_URL}"', login.text)
+        self.assertIn('src="/static/login-mascot.png?', login.text)
         self.assertEqual(login.headers['cache-control'], 'no-store')
         self.assertEqual(self.client.get('/static/login.css').headers['cache-control'], 'no-store')
 
