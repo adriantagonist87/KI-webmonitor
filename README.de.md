@@ -9,15 +9,16 @@ Brave, Anwendung und Daten laufen in Docker. Die KI-Inferenz erfolgt ausschließ
 keine Modelle und benötigt keinen Cloud-KI-Anbieter.
 
 - Projekte mit eigenem Prompt, Zeitplan, Tags und Webseitenzugang.
-- Grafisch bedienbarer Brave mit Werbeblocker und dauerhaftem Anmeldeprofil.
+- Grafisch bedienbarer Brave mit Werbeblocker, dauerhaftem Anmeldeprofil und aufzeichnungsfähigen Browser-Makros je Projekt.
 - Optionaler [visueller Bedienmodus mit echter Maus und Tastatur](docs/VISUELLE-BROWSERBEDIENUNG.md), pro Projekt wählbar und zunächst in Erprobung.
 - Technischer Webseitenvergleich und verständliche, aufklappbare Berichte.
 - Vollständiger Dateidownload, **SHA-256-Vergleich und Dateimetadaten**.
 - Der digitale Text der ersten Seite kann zur Ermittlung des Dokumenttitels
   verwendet werden. Der Dateivergleich erfolgt per Hash, ohne OCR.
-- HTML-Wochenbericht mit Textalternative; konfigurierbarer SMTP-Versand.
+- HTML-Berichte mit Textalternative, konfigurierbarem Berichtszeitraum und SMTP-Zeitplan.
 - Telegram-Sofortmeldungen mit KI-Auswertung bei Änderungen und Prüfproblemen.
-- Dateiverzeichnis, ZIP nach Projektordnern, Export und Reimport.
+- Globales Dateiverzeichnis mit Dateigrößen in MB und ZIP-Download nach Projektordnern.
+- Sortierbare Speicherübersicht, gezielte Bereinigung mit Vorschau und Export / Import mit optional verschlüsselten Zugangsdaten.
 
 ## Offline-Installation mit Portainer
 
@@ -97,7 +98,7 @@ prüfen. Nach Portänderungen den Tunnel entsprechend anpassen.
    Pausierte Projekte lassen sich gelb filtern; wartende automatische Läufe
    entfallen beim Pausieren, laufende und manuelle Prüfungen bleiben erhalten.
    Änderungsbefunde sind direkt sichtbar; Quellen und technische Details lassen
-   sich aufklappen. Eine allgemeine Promptvorlage steht in [docs/PROJEKTE.md](docs/PROJEKTE.md).
+   sich aufklappen. [Allgemeine Promptvorlage](docs/PROJEKTE.md) · [Projektprompt-Beispiele](docs/projektprompts/)
 
 Eine erste Fassung ist ein Ausgangsstand. Dateien werden vollständig geladen;
 gleiche Bytes gelten als unverändert, andere Bytes als **Datei geändert**.
@@ -124,8 +125,8 @@ Ausgaben mit `VDE V` in der Bezeichnung werden als **Vornorm** gespeichert und
 in der Auswertung sowie in Benachrichtigungen gekennzeichnet.
 
 Telegram und SMTP haben eigene Einträge in der Sidebar. Beide lassen sich über
-die Oberfläche und über optionale Portainer-ENV-Werte konfigurieren. Verbindung
-und Testnachricht/Testmail können dort über Knöpfe geprüft werden. Telegram kann
+die Oberfläche konfigurieren. Gespeicherte Web-Einstellungen haben Vorrang vor
+optionalen Stack-Vorgaben. Verbindung und Testnachricht lassen sich dort prüfen. Telegram kann
 global für alle Projekte aus- oder eingeschaltet werden oder den einzelnen
 Projektvorgaben folgen. Standardmäßig ist es aus. Details und sämtliche Variablen:
 [Telegram und SMTP](docs/KOMMUNIKATION.md).
@@ -136,9 +137,9 @@ zählt mit. Erkannter Bot-Schutz beendet den aktuellen Lauf und unterdrückt die
 zusätzliche 30-Minuten-Fehlerwiederholung; das Projekt bleibt regulär aktiviert.
 HTTP `Retry-After` wird berücksichtigt. Es gibt keine CAPTCHA-Umgehung.
 
-Der konsolidierte Wochenbericht entsteht montags um 08:00 Uhr Europe/Berlin.
-Ohne produktive SMTP-Konfiguration bleibt er als **Vorschau · nicht versandt**
-gespeichert. Ein Testbericht ist ebenfalls eine Vorschau. Das optionale
+Unter **SMTP-Mailserver** sind Uhrzeit, Häufigkeit und Berichtszeitraum getrennt
+einstellbar. Montag um 08:00 Uhr in `Europe/Berlin` ist die Voreinstellung.
+Ohne aktivierten Versand bleibt der Bericht als Vorschau gespeichert. Das optionale
 [Testzubehör](compose.test.yaml) bietet echtes Test-SMTP mit Mailpit.
 Produktiver Versand wird ausschließlich über die SMTP-Einstellungen aktiviert.
 
@@ -215,9 +216,9 @@ Filter „Normen“, 17 Einträge des Ausgabejahrs 2026 und KI-Bericht.
 Bot-Schutz beendet weiterhin den aktuellen Versuch ohne Zusatzwiederholung;
 der reguläre Zeitplan bleibt aktiv.
 
-## Kompakter Wochenbericht
+## HTML-Berichte
 
-Release 1.4 verwendet dieselbe HTML-Ausgabe für Mail und isolierte Vorschau, mit Tagfarben, eingebetteten Favicons und drei Spalten für unveränderte Quellen. [Aufbau und Prüfungen](docs/WOCHENBERICHT-1.4.md).
+Die aktuelle Mailvorlage verwendet das lesende Maskottchen, eine Tabelle für relevante Änderungen und eine Übersicht der Quellen mit und ohne Änderungen. Die Berichte verlinken die überwachten Websites und pro geänderter Quelle die lesbare Originalseite. [Berichtsvorschau](docs/screenshots/wochenbericht.png) · [Zeitplan und Archiv](docs/VERTEILER.md)
 
 Farbige Dateisymbole und die systemunabhängige Animationssteuerung: [Darstellung 1.4.1](docs/DARSTELLUNG-1.4.1.md).
 

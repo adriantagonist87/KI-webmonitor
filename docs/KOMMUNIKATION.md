@@ -62,8 +62,10 @@ Anmeldedaten werden erst nach dem TLS-Aufbau übertragen.
   SMTP-NOOP, ohne eine Mail zu versenden.
 - **Testmail senden** sendet eine kleine HTML-Mail mit Textalternative an den
   gespeicherten Empfänger, auch wenn der automatische Versand noch aus ist.
-- **Wochenberichte per E-Mail versenden** aktiviert den bestehenden konsolidierten
-  Bericht montags um 08:00 Uhr Europe/Berlin. Ohne Aktivierung bleibt er Vorschau.
+- **Berichte per E-Mail versenden** aktiviert den automatischen Versand. Uhrzeit,
+  Häufigkeit und Berichtszeitraum sind getrennt einstellbar. Die Voreinstellung
+  ist Montag um 08:00 Uhr in `Europe/Berlin` für die vorangegangenen sieben Tage.
+  Bei ausgeschaltetem Versand speichert die App den Bericht als Vorschau.
 
 Änderungen zuerst speichern; die Testknöpfe verwenden gespeicherte beziehungsweise
 effektive ENV-Werte. „Vom SMTP-Server angenommen“ bestätigt die Übergabe, nicht

@@ -28,6 +28,9 @@ pro Projekt. Die vorhandenen begrenzten Sonderfälle stehen in ARCHITEKTUR.md.
 
 ## Allgemeine Vorlage für Dokumentseiten
 
+Konkrete Aufträge für Fachportale, Behörden und Netzbetreiber findest du in
+den [Projektprompt-Beispielen](projektprompts/).
+
 ```text
 Überwache die auf der Start-URL veröffentlichten Fachunterlagen zum Thema
 [THEMA]. Eingeschlossen sind [KATEGORIEN]; ausgeschlossen sind [AUSSCHLÜSSE].
