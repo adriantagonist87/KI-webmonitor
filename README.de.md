@@ -25,12 +25,13 @@ keine Modelle und benötigt keinen Cloud-KI-Anbieter.
    Registry beziehen. Ein vorhandenes Offline-Imagepaket lässt sich so laden:
 
    ```sh
-   gzip -dc KI-Webmonitor-1.5.18-Images.tar.gz | docker image load
+   gzip -dc KI-Webmonitor-Images.tar.gz | docker image load
    ```
 
 2. In Portainer **Stacks → Add stack → Web editor** öffnen und
    [portainer-stack.yaml](portainer-stack.yaml) einfügen. Alternativ das eigene
-   Git-Repository mit dieser Datei auswählen.
+   Git-Repository mit dieser Datei auswählen. `VERSION` auf den Tag des
+   geladenen Offline-Pakets setzen.
 3. Optional die Werte aus [.env.example](.env.example) als Stack-Variablen setzen.
    API-Adresse, Token und Modell können vollständig in der Weboberfläche bleiben.
 4. Stack starten. Daten-Volumes, Konfiguration und Browserprofil entstehen
@@ -48,7 +49,7 @@ Platzhalter. [Portainer und Releases](docs/PORTAINER.md)
 
 | Variable | Standard / Wirkung |
 | --- | --- |
-| `VERSION` | `1.5.18`, gemeinsame Version der fünf Images |
+| `VERSION` | `1.5.19`, gemeinsame Version der fünf Images |
 | `WEB_PORT` | `8765`, geschützter Zugang zur Anwendung |
 | `BROWSER_PORT` | `8766`, geschützter Zugang zum grafischen Brave |
 | `KIWM_OMLX_URL` | Optional: Adresse des lokalen KI-Servers einschließlich Port |

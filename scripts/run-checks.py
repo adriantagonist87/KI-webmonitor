@@ -35,6 +35,7 @@ SUITES = {
     'communication_checks': 38,
     'release_checks': 17,
     'site_safety_checks': 20,
+    'site_access_checks': 10,
     'site_safety_browser_checks': 7,
     'retention_checks': 23, 'document_inventory_checks': 24,
     'retention_integration_checks': 9, 'history_cleanup_checks': 8, 'retention_ui_checks': 7,

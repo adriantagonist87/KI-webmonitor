@@ -102,7 +102,8 @@ class Enhancements(unittest.TestCase):
   return projects,runs,changes,[{'name':'Arbeit','color':'#1967d2'},{'name':'Privat','color':'#8b5cf6'}],start,end
  def test_11_tag_grouping_changed_first_quiet_last(self):
   model=mails.build_model(*self.mail_data());text,html=mails.compose(*self.mail_data());soup=BeautifulSoup(html,'html.parser')
-  self.assertEqual([h['data-tag-name'] for h in soup.select('[data-tag-name]')],['Arbeit','Privat','Ohne Tag'])
+  self.assertEqual([h['data-tag-name'] for h in soup.select('[data-tag-name]')],['Arbeit','Privat','Arbeit'])
+  self.assertEqual([row['data-change-project-id'] for row in soup.select('[data-change-project-id]')],['change'])
   self.assertLess(html.index('Z-Änderung'),html.index('A-Unverändert'))
   self.assertEqual(model['projects']['quiet']['category'],'unchanged')
   self.assertEqual(model['projects']['change']['category'],'changed')
@@ -110,10 +111,13 @@ class Enhancements(unittest.TestCase):
   self.assertNotIn('Frist 10 Tage',html);self.assertNotIn('Frist 11 Tage',html)
 
  def test_12_failure_and_unchecked_are_never_claimed_unchanged(self):
-  model=mails.build_model(*self.mail_data());_,html=mails.compose(*self.mail_data())
+  model=mails.build_model(*self.mail_data());text,html=mails.compose(*self.mail_data())
   self.assertEqual(model['projects']['bad']['category'],'notice')
   self.assertEqual(model['projects']['new']['category'],'notice')
-  self.assertIn('fehlgeschlagen',html);self.assertIn('Im Berichtszeitraum nicht geprüft',html)
+  soup=BeautifulSoup(html,'html.parser')
+  self.assertEqual([row['data-project-id'] for row in soup.select('[data-category=unchanged]')],['quiet'])
+  for value in ('Fehler','Ungeprüft','fehlgeschlagen','Im Berichtszeitraum nicht geprüft'):
+   self.assertNotIn(value,text+html)
 
  def test_13_mail_injection_escaped_and_no_tracking_images(self):
   data=list(self.mail_data());data[0][1]['name']='<img src=x onerror=alert(1)>';data[2][0]['evidence']=json.dumps({'note':'<script>evil()</script>**Wichtig** ![track](https://evil.test/a)'})
@@ -123,7 +127,9 @@ class Enhancements(unittest.TestCase):
 
  def test_14_empty_period_is_honest(self):
   data=list(self.mail_data());data[1]=[];data[2]=[];text,html=mails.compose(*data)
-  self.assertNotIn('Keine relevanten Änderungen',html);self.assertIn('0 geprüft',text)
+  self.assertIn('Für diesen Zeitraum liegen keine Quellen im Bericht vor.',html)
+  self.assertIn('0 überwachte Quellen',text)
+  self.assertNotIn('data-change-table',html)
  def test_15_multipart_alternative_and_readable_plaintext(self):
   bundle=mails.render(mails.build_model(*self.mail_data()));smtp=MagicMock()
   with patch.dict(os.environ,{'KIWM_TEST_SMTP_HOST':'mailpit'}),patch.object(gateway.smtplib,'SMTP',return_value=smtp),patch.object(gateway,'settings',return_value={}):gateway.send_mail(bundle['text'],'Test',True,bundle['html'],bundle['images'])
@@ -188,7 +194,9 @@ class Enhancements(unittest.TestCase):
   for pid in ('quiet','bad','new'):data[1].append({'project_id':pid,'started':'2026-11-04T12:00:00+00:00','finished':'2026-11-04T12:00:01+00:00','status':'cancelled','error':'CANCELLED_NOT_A_CHECK','summary':'CANCELLED_NOT_A_CHECK','origin':'retry'})
   saved=copy.deepcopy(data[1]);model=mails.build_model(*data);text,html=mails.compose(*data)
   self.assertEqual(data[1],saved)
-  self.assertIn('3 geprüft · 2 erfolgreich · 1 aktuell fehlerhaft/unvollständig',text)
+  self.assertEqual({k:model['counts'][k] for k in ('checked','successful','failed')},
+                   {'checked':3,'successful':2,'failed':1})
+  self.assertIn('2 überwachte Quellen',text)
   self.assertEqual(model['projects']['quiet']['category'],'unchanged')
   self.assertEqual(model['projects']['bad']['category'],'notice');self.assertEqual(model['projects']['new']['category'],'notice')
   self.assertNotIn('CANCELLED_NOT_A_CHECK',text+html)

@@ -13,7 +13,7 @@ benötigt Linux amd64 und Docker Standalone.
 | --- | --- |
 | Name | `ki-webmonitor-test` |
 | Repository URL | `https://github.com/adriantagonist87/KI-webmonitor.git` |
-| Repository reference | `refs/tags/v1.5.18` |
+| Repository reference | `refs/tags/v1.5.19` |
 | Compose path für Zugriff im LAN | `portainer-lan-stack.yaml` |
 | Compose path für Zugriff per SSH-Tunnel | `portainer-stack.yaml` |
 
@@ -22,7 +22,7 @@ Unter **Environment variables** eintragen:
 
 ```dotenv
 IMAGE_PREFIX=ghcr.io/adriantagonist87/ai-webmonitor
-VERSION=1.5.18
+VERSION=1.5.19
 KIWM_ADMIN_USERNAME=
 KIWM_ADMIN_PASSWORD=
 ```
@@ -46,11 +46,12 @@ GitHub-Quellcode allein liefert die Stack-Datei.
 ## Installation mit lokal geladenen Images
 
 Die fünf Images `ki-webmonitor-app`, `ki-webmonitor-browser`, `ki-webmonitor-proxy`,
-`ki-webmonitor-ingress` und `ki-webmonitor-page-reader` mit dem Tag `1.5.18` auf den
-Docker-Host laden. App und Gateway verwenden dasselbe App-Image.
+`ki-webmonitor-ingress` und `ki-webmonitor-page-reader` aus einem vorhandenen
+Offline-Paket auf den Docker-Host laden und `VERSION` auf dessen Image-Tag setzen.
+App und Gateway verwenden dasselbe App-Image.
 
 ```sh
-gzip -dc KI-Webmonitor-1.5.18-Images.tar.gz | docker image load
+gzip -dc KI-Webmonitor-Images.tar.gz | docker image load
 ```
 
 In Portainer einen neuen **Standalone-Stack** anlegen und die Stack-Datei in
@@ -97,13 +98,15 @@ prüft er öffentliche Quelldateien und die Compose-Konfiguration. Ein manuell
 gestarteter Workflow baut standardmäßig ohne Veröffentlichung. Ein `v*`-Tag
 oder ausdrücklich gesetztes Publish veröffentlicht in die GHCR des eigenen
 Repositories. `v1.3.6` wird zum Image-Tag `1.3.6` normalisiert.
+Beim Veröffentlichen des neuesten stabilen GitHub-Releases erhält jeder der fünf
+geprüften Image-Digests zusätzlich den Tag `latest`.
 
 Erst nach Anlegen des eigenen Repositories und Freigabe der Packages kann man
 beispielsweise setzen:
 
 ```dotenv
 IMAGE_PREFIX=ghcr.io/OWNER/REPOSITORY
-VERSION=1.5.18
+VERSION=1.5.19
 ```
 
 Der Stack verwendet dann `${IMAGE_PREFIX}-app`, `-browser`, `-proxy`, `-ingress` und `-page-reader`.

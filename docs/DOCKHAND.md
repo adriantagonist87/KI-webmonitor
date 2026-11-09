@@ -1,6 +1,6 @@
 # Installation mit Dockhand
 
-[Dockhand](https://github.com/Finsys/dockhand) verwaltet den KI-Webmonitor als Docker-Compose-Stack. Die Anleitung setzt voraus, dass Dockhand läuft und der Linux-Docker-Host mit `amd64` als Environment verbunden ist. Die Images für `1.5.18` sind öffentlich abrufbar.
+[Dockhand](https://github.com/Finsys/dockhand) verwaltet den KI-Webmonitor als Docker-Compose-Stack. Die Anleitung setzt voraus, dass Dockhand läuft und der Linux-Docker-Host mit `amd64` als Environment verbunden ist. Die Images für `1.5.19` sind öffentlich abrufbar.
 
 ## Stack aus Git anlegen
 
@@ -17,7 +17,7 @@ Die Git-Optionen und die Variablenverwaltung sind im [Dockhand-Handbuch](https:/
 | Name | Wert |
 | --- | --- |
 | `IMAGE_PREFIX` | `ghcr.io/adriantagonist87/ai-webmonitor` |
-| `VERSION` | `1.5.18` |
+| `VERSION` | `1.5.19` |
 | `KIWM_ADMIN_USERNAME` | Eigener Adminname |
 | `KIWM_ADMIN_PASSWORD` | Eigenes Passwort mit mindestens zwölf Zeichen. In Dockhand als **Secret** markieren. |
 | `KIWM_LAN_IP` | Nur für den LAN-Stack. Private IPv4-Adresse des Ziel-Docker-Hosts. |
@@ -30,8 +30,14 @@ Im LAN ist die App unter `http://<DOCKER-HOST>:8765/` erreichbar. Beim Standards
 
 ## Lokaler Stack im Editor
 
-Für eine Installation mit einem festen Stand der Compose-Datei in **Stacks → New stack** den YAML-Editor öffnen und die Datei aus dem Release-Tag einfügen. Für SSH gilt [compose.yaml](https://github.com/adriantagonist87/KI-webmonitor/blob/v1.5.18/compose.yaml), für das LAN [portainer-lan-stack.yaml](https://github.com/adriantagonist87/KI-webmonitor/blob/v1.5.18/portainer-lan-stack.yaml). Die Variablen wie oben eintragen, **Deploy immediately** aktivieren und den Stack anlegen.
+Für eine Installation mit einem festen Stand der Compose-Datei in **Stacks → New stack** den YAML-Editor öffnen und die Datei aus dem Release-Tag einfügen. Für SSH gilt [compose.yaml](https://github.com/adriantagonist87/KI-webmonitor/blob/v1.5.19/compose.yaml), für das LAN [portainer-lan-stack.yaml](https://github.com/adriantagonist87/KI-webmonitor/blob/v1.5.19/portainer-lan-stack.yaml). Die Variablen wie oben eintragen, **Deploy immediately** aktivieren und den Stack anlegen.
 
 ## Aktualisieren
 
 Vor einem Update die Daten sichern. Für den Git-Stack die Änderungen an der Compose-Datei prüfen, `VERSION` auf den gewünschten veröffentlichten Image-Tag setzen und den vorhandenen Stack erneut deployen. Beim lokalen Stack zusätzlich den YAML-Inhalt aus dem dazugehörigen Release-Tag übernehmen. Der gleiche Stackname und dieselben Speicherzuordnungen sorgen dafür, dass Docker die bestehenden Volumes wieder einbindet. [Sicherung und Wiederherstellung](OPERATIONS.md)
+
+### Den neuesten Release mit `latest` beziehen
+
+Im Git-Stack `IMAGE_PREFIX=ghcr.io/adriantagonist87/ai-webmonitor` und `VERSION=latest` setzen. **Re-pull images** aktivieren, damit Dockhand bei jedem Deploy die fünf aktuellen Images aus GHCR lädt. Ein **Deploy** startet das Update. Für geplante Synchronisierung oder einen Webhook bei gleichbleibendem Git-Stand zusätzlich **Force redeployment** aktivieren. [Dockhand Git integration](https://dockhand.pro/manual/#git-integration)
+
+Der `v*`-Tag baut zunächst die nummerierten Images. Nach erfolgreichem Build wird der GitHub-Release veröffentlicht. Die GitHub-Aktion kopiert die fünf geprüften Image-Digests des neuesten stabilen Releases auf `latest`. Vor dem Deploy warten, bis auch diese Aktion erfolgreich abgeschlossen ist. Eine feste Version wie `1.5.19` erlaubt die gezielte Auswahl eines älteren Stands.

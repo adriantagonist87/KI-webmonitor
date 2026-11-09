@@ -1,5 +1,6 @@
-Release: 1.5.18
+Release: 1.5.19
 Stand: 2026-11-09
+1.5.19: Geschützter Zugangsdaten-Transfer, Wartungsseite, SMTP-Zeitpläne und Browser-Makros.
 1.5.18: Globaler Prüfverlauf mit Vorschau und speicherschonender Export großer Archive.
 1.5.16: Schmales Brave-Fenster zur Erprobung und robuste Obsidian-Übersetzung.
 1.5.15: Versioniertes Browser-Icon, robusterer visueller Login und öffentlicher Obsidian-Changelog.

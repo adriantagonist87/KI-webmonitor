@@ -2,6 +2,8 @@ name: Build release images
 on:
   push:
     tags: ['v*']
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
@@ -16,6 +18,7 @@ permissions:
   contents: read
 jobs:
   preflight:
+    if: github.event_name != 'release'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -76,12 +79,16 @@ jobs:
               tag=tag[1:]
           if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}',tag):
               raise SystemExit('Invalid Docker image tag')
+          if tag.lower() == 'latest':
+              raise SystemExit('The latest tag is reserved for published releases')
           prefix=os.environ['IMAGE_PREFIX'] or 'ghcr.io/'+os.environ['GITHUB_REPOSITORY'].lower()
           if not re.fullmatch(r'ghcr\.io/[a-z0-9-]+/[a-z0-9]+(?:[._-]+[a-z0-9]+)*',prefix):
               raise SystemExit('Invalid GHCR image prefix')
           with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
               stream.write('name='+prefix+'-'+os.environ['COMPONENT']+':'+tag+'\n')
+              stream.write('tag='+tag+'\n')
           PY
+          printf 'revision=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
         if: github.event_name == 'push' || inputs.publish
         uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
@@ -97,4 +104,65 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.event_name == 'push' || inputs.publish }}
           tags: ${{ steps.image.outputs.name }}
-          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.image.outputs.revision }}
+            org.opencontainers.image.version=${{ steps.image.outputs.tag }}
+  latest:
+    name: Promote published release images to latest
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: ghcr-latest
+      cancel-in-progress: false
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify and promote the five published images
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          IMAGE_PREFIX: ${{ vars.KIWM_IMAGE_PREFIX }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 0
+          latest_release() { gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name; }
+          if [[ "$(latest_release)" != "$RELEASE_TAG" ]]; then
+            echo 'This release is not marked as latest on GitHub.'
+            exit 0
+          fi
+          prefix="${IMAGE_PREFIX:-ghcr.io/${GITHUB_REPOSITORY,,}}"
+          [[ "$prefix" =~ ^ghcr\.io/[a-z0-9-]+/[a-z0-9]+([._-][a-z0-9]+)*$ ]]
+          version="${RELEASE_TAG#v}"
+          components=(app page-reader browser proxy ingress)
+          declare -A digests
+          for component in "${components[@]}"; do
+            name="$prefix-$component"
+            digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$name:$version")"
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            revision="$(docker buildx imagetools inspect --format '{{json .Image}}' "$name@$digest" |
+              jq -er '(."linux/amd64" // .) | select(.os == "linux" and .architecture == "amd64") | .config.Labels["org.opencontainers.image.revision"]')"
+            if [[ "$revision" != "$GITHUB_SHA" ]]; then
+              echo "Release revision mismatch for $component"
+              exit 1
+            fi
+            digests[$component]="$digest"
+          done
+          if [[ "$(latest_release)" != "$RELEASE_TAG" ]]; then exit 0; fi
+          for component in "${components[@]}"; do
+            name="$prefix-$component"
+            docker buildx imagetools create --prefer-index=false --tag "$name:latest" "$name@${digests[$component]}"
+          done
+          for component in "${components[@]}"; do
+            digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$prefix-$component:latest")"
+            [[ "$digest" == "${digests[$component]}" ]]
+            echo "$component: $version and latest resolve to $digest"
+          done

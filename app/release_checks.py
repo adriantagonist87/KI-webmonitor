@@ -142,7 +142,8 @@ class Release(unittest.TestCase):
     def test_16_release_ui_hides_absent_test_mailbox(self):
         with patch.dict(os.environ,{'KIWM_TEST_TOOLS':''}):
             client=TestClient(web.app);settings=client.get('/smtp').text;reports=client.get('/reports').text;client.close()
-        self.assertIn('Vorschau gespeichert',settings);self.assertNotIn('Testpostfach öffnen',settings)
+        self.assertIn('speichert der Webmonitor die Berichte als Vorschau',settings)
+        self.assertNotIn('Testpostfach öffnen',settings)
         self.assertIn('Vorschau erstellen',reports)
 
     def test_17_restore_checks_available_space_before_writing(self):

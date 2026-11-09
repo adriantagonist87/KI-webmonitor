@@ -5,7 +5,7 @@ Die Befehle laufen auf einem Linux-Docker-Host mit `amd64`, Docker Engine, dem C
 ## Projekt und `.env` vorbereiten
 
 ```sh
-git clone --branch v1.5.18 --depth 1 https://github.com/adriantagonist87/KI-webmonitor.git ki-webmonitor
+git clone --branch v1.5.19 --depth 1 https://github.com/adriantagonist87/KI-webmonitor.git ki-webmonitor
 cd ki-webmonitor
 umask 077
 cp .env.example .env
@@ -16,7 +16,7 @@ In der privaten `.env` die folgenden Einträge setzen. Für das Passwort einen e
 
 ```dotenv
 IMAGE_PREFIX=ghcr.io/adriantagonist87/ai-webmonitor
-VERSION=1.5.18
+VERSION=1.5.19
 KIWM_ADMIN_USERNAME=admin
 KIWM_ADMIN_PASSWORD=''
 ```
