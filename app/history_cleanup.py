@@ -25,7 +25,7 @@ def rule(mode, amount):
     return mode, int(amount)
 
 
-def _selection(connection, mode, amount):
+def _selection(connection, mode, amount, project_ids=None):
     if connection.execute("SELECT 1 FROM runs WHERE status IN ('running','queued') LIMIT 1").fetchone():
         raise ValueError('Laufende und wartende Prüfungen zuerst abschließen lassen.')
     cutoff = datetime.now(timezone.utc) - timedelta(days=amount) if mode == 'days' else None
@@ -34,6 +34,8 @@ def _selection(connection, mode, amount):
     for row in connection.execute('''SELECT id,project_id,started,finished FROM runs
                                      ORDER BY julianday(started) DESC,rowid DESC'''):
         pid = row['project_id']
+        if project_ids is not None and pid not in project_ids:
+            continue
         rank[pid] += 1
         finished = retention._date(row['finished'] or row['started']) if cutoff else None
         if mode == 'all' or (mode == 'last' and rank[pid] > amount) or (finished and finished < cutoff):
@@ -58,7 +60,7 @@ def preview(mode, amount):
         return _preview(mode, amount, _selection(connection, mode, amount), _pending(connection))
 
 
-def _stage_deletion(connection, root, runs, pending):
+def _stage_deletion(connection, root, runs, pending, *, artifacts=None, reset_projects=()):
     if any(not retention._ID.fullmatch(rid) or rid == 'objects' for rid in runs):
         raise ValueError('Unsichere Prüfungs-ID; der Verlauf wurde nicht verändert.')
     connection.execute('CREATE TEMP TABLE history_runs(id TEXT PRIMARY KEY)')
@@ -68,7 +70,8 @@ def _stage_deletion(connection, root, runs, pending):
     candidates = pending | {path for row in connection.execute(
         'SELECT file,screenshot,html FROM snapshots WHERE id IN history_snapshots') for path in row if path}
     if runs:
-        candidates.update(path for path in retention._files(root, 'artifacts') if path.split('/', 2)[1] in runs)
+        paths = retention._files(root, 'artifacts') if artifacts is None else artifacts
+        candidates.update(path for path in paths if path.split('/', 2)[1] in runs)
     # Check all deletion paths before changing the database.
     for path in candidates:
         retention._safe(root, path)
@@ -88,11 +91,11 @@ def _stage_deletion(connection, root, runs, pending):
     connection.execute('DELETE FROM snapshots WHERE id IN history_snapshots')
     connection.execute('DELETE FROM runs WHERE id IN history_runs')
 
-    for pid in set(runs.values()):
+    for pid in set(runs.values()) | set(reset_projects):
         connection.execute('''UPDATE projects SET last_success=(
             SELECT finished FROM runs WHERE project_id=? AND status='success'
             ORDER BY julianday(finished) DESC,rowid DESC LIMIT 1) WHERE id=?''', (pid, pid))
-        if not connection.execute('''SELECT 1 FROM snapshots s JOIN runs r ON r.id=s.run_id
+        if pid in reset_projects or not connection.execute('''SELECT 1 FROM snapshots s JOIN runs r ON r.id=s.run_id
                                      WHERE s.project_id=? AND r.status IN ('success','partial') LIMIT 1''', (pid,)).fetchone():
             prefix = 'collection_index:' + pid + ':'
             connection.execute('DELETE FROM state WHERE key=? OR substr(key,1,?)=?',

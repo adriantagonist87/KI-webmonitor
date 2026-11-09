@@ -34,6 +34,7 @@ import site_safety
 import tag_registry
 import project_lifecycle
 import history_cleanup
+import maintenance
 import project_icons
 import email_reports
 import distributions
@@ -336,6 +337,7 @@ def breadcrumb_path(page, ctx):
         'telegram': ('/telegram', 'Telegram'),
         'smtp': ('/smtp', 'SMTP-Mailserver'),
         'settings': ('/settings', 'Einstellungen'),
+        'maintenance': ('/maintenance', 'Wartung & Bereinigung'),
         'transfer': ('/transfer', 'Export / Import'),
         'prompt_help': ('/help/prompts', 'Prompt-Beispiele'),
     }
@@ -1066,9 +1068,9 @@ async def config_page(request: Request):
     return await render_settings(request)
 
 async def render_settings(request, history_preview=None):
-    storage = await asyncio.to_thread(retention.inspect)
-    return render(request, 'settings', models=read_json(Path('/config/models.json')).get('models', []), capabilities=read_json(Path('/config/capabilities.json')), storage=storage, storage_policy=retention.policy(), config_sources=configuration_sources(), history_preview=history_preview)
+    return render(request, 'settings', models=read_json(Path('/config/models.json')).get('models', []), capabilities=read_json(Path('/config/capabilities.json')), config_sources=configuration_sources(), history_preview=history_preview)
 
+@app.post('/maintenance/storage')
 @app.post('/settings/storage')
 async def save_storage(request: Request):
     form = await request.form()
@@ -1088,7 +1090,61 @@ async def save_storage(request: Request):
     config = persisted_settings()
     config['retention'] = selected
     save_json(CONFIG, config)
-    return RedirectResponse('/settings?notice=storage_saved#speicher', 303)
+    return RedirectResponse(request.url.path.rsplit('/', 1)[0] + '?notice=storage_saved#speicher', 303)
+
+
+async def render_maintenance(request, *, options=None, planned=None, result=None, error=None, status=200):
+    try:
+        storage = await asyncio.to_thread(maintenance.overview)
+    except (ValueError, OSError):
+        storage = None
+        error = 'Die Speicherübersicht konnte nicht vollständig ermittelt werden.'
+        status = 409
+    response = render(request, 'maintenance', storage=storage, storage_policy=retention.policy(),
+                      options=options, planned=planned, result=result, maintenance_error=error)
+    response.status_code = status
+    return response
+
+
+@app.get('/maintenance')
+async def maintenance_page(request: Request):
+    return await render_maintenance(request)
+
+
+@app.post('/maintenance/preview')
+async def maintenance_preview(request: Request):
+    try:
+        options = maintenance.selection(await request.form())
+    except ValueError as error:
+        return await render_maintenance(request, error=str(error), status=400)
+    try:
+        planned = await asyncio.to_thread(maintenance.preview, options)
+    except ValueError as error:
+        return await render_maintenance(request, options=options, error=str(error), status=409)
+    except OSError:
+        return await render_maintenance(request, options=options, error='Die Ablage ist derzeit nicht lesbar.', status=409)
+    return await render_maintenance(request, options=options, planned=planned)
+
+
+@app.post('/maintenance/cleanup')
+async def maintenance_cleanup(request: Request):
+    form = await request.form()
+    try:
+        options = maintenance.selection(form)
+        if form.get('confirm') != 'on' or (options['kind'] == 'reset' and form.get('reset_confirmation') != 'NEUSTART'):
+            raise ValueError('Bestätige die endgültige Bereinigung wie in der Vorschau angegeben.')
+    except ValueError as error:
+        return await render_maintenance(request, error=str(error), status=400)
+    try:
+        if engine.BUSY.locked() or engine.REPORT_LOCK.locked() or notifications.LOCK.locked():
+            raise ValueError('Laufende Prüfungen, Berichte und den Telegram-Versand zuerst abschließen lassen.')
+        async with engine.BUSY, engine.REPORT_LOCK, notifications.LOCK:
+            result = await asyncio.to_thread(maintenance.clean, options, form.get('fingerprint'))
+    except ValueError as error:
+        return await render_maintenance(request, options=options, error=str(error), status=409)
+    except OSError:
+        return await render_maintenance(request, options=options, error='Die Ablage ist derzeit nicht zugänglich.', status=409)
+    return await render_maintenance(request, result=result)
 
 @app.post('/settings/storage/cleanup')
 async def cleanup_storage():
@@ -1305,7 +1361,7 @@ async def reports(request: Request):
     regular_only = request.query_params.get('regular') == '1'
     try:page=max(1,int(request.query_params.get('page','1')))
     except ValueError:page=1
-    where=[];args=[]
+    where=['mail_status<>?'];args=[maintenance.PURGED]
     if scope in ('admin','distribution'):where.append('audience=?');args.append(scope)
     if did:where.append('distribution_id=?');args.append(did)
     if regular_only:where.append("period_key NOT LIKE 'test-%'")
@@ -1320,29 +1376,33 @@ async def report_test():
     return redirect('/reports/'+rid)
 
 def get_report(rid):
-    r=one('SELECT * FROM reports WHERE id=?',(rid,))
+    r=one('SELECT * FROM reports WHERE id=? AND mail_status<>?',(rid,maintenance.PURGED))
     if not r:raise HTTPException(404)
     return r
 
 @app.get('/reports/{rid}/html')
-async def report_html(rid: str):
-    return HTMLResponse(email_reports.preview_html(get_report(rid)),headers={
+def report_html(rid: str):
+    with retention.maintenance_lock(exclusive=False):
+        html = email_reports.preview_html(get_report(rid))
+    return HTMLResponse(html,headers={
         'X-Frame-Options':'SAMEORIGIN',
         'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; frame-ancestors 'self'; form-action 'none'; base-uri 'none'"})
 
 @app.get('/reports/{rid}/assets/{cid}')
-async def report_asset(rid: str,cid: str):
-    r=get_report(rid)
-    images=report_images.validate(email_reports.saved_images(r),email_reports.saved_html(r))
+def report_asset(rid: str,cid: str):
+    with retention.maintenance_lock(exclusive=False):
+        r=get_report(rid)
+        images=report_images.validate(email_reports.saved_images(r),email_reports.saved_html(r))
     if cid not in images:raise HTTPException(404)
     return Response(images[cid],media_type='image/png')
 
 @app.get('/reports/{rid}/message.eml')
-async def report_eml(rid: str):
-    r=get_report(rid)
-    text,html=email_reports.message_parts(r)
-    message=mail_message.build(text,report_mail.subject(r),
-        'webmonitor@example.test',r.get('recipient_email') or 'preview@example.test',html,email_reports.saved_images(r))
+def report_eml(rid: str):
+    with retention.maintenance_lock(exclusive=False):
+        r=get_report(rid)
+        text,html=email_reports.message_parts(r)
+        message=mail_message.build(text,report_mail.subject(r),
+            'webmonitor@example.test',r.get('recipient_email') or 'preview@example.test',html,email_reports.saved_images(r))
     return Response(message.as_bytes(),media_type='message/rfc822',headers={
         'Content-Disposition':'attachment; filename="KI-Webmonitor-Wochenbericht-'+rid+'.eml"'})
 

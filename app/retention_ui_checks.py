@@ -25,14 +25,6 @@ from fastapi.testclient import TestClient
 web.CONFIG = store.CONFIG
 web.SECRETS = store.SECRETS
 
-USAGE = {
-    'status': 'preview', 'policy': dict(retention.DEFAULT_POLICY),
-    'usage': {'total_bytes': 10 * 1024**2, 'documents_bytes': 6 * 1024**2,
-              'ocr_bytes': 1024, 'database_bytes': 2048},
-    'candidates': {'bytes': 3 * 1024**2}, 'last_cleanup': None, 'skipped': [],
-}
-
-
 class StorageUI(unittest.TestCase):
     def setUp(self):
         self.original = {'omlx_url': 'http://model.test:8000/v1',
@@ -48,19 +40,18 @@ class StorageUI(unittest.TestCase):
         values.update(overrides)
         return values
 
-    def test_01_settings_are_compact_and_show_usage(self):
-        with patch.object(retention, 'inspect', return_value=USAGE):
-            response = self.client.get('/settings')
+    def test_01_storage_rules_and_usage_are_in_maintenance(self):
+        self.assertIn('href="/maintenance"', self.client.get('/settings').text)
+        response = self.client.get('/maintenance')
         self.assertEqual(response.status_code, 200)
         page = BeautifulSoup(response.text, 'html.parser')
         section = page.select_one('details#speicher')
         self.assertIsNotNone(section)
         self.assertFalse(section.has_attr('open'))
-        self.assertIn('10.0 MiB', section.summary.get_text())
+        self.assertIn('Freier Platz auf dem Datenvolume', page.select_one('#speicherbelegung').get_text())
         self.assertEqual(section.select_one('[name=document_versions] option[selected]')['value'], '2')
         self.assertEqual(section.select_one('[name=detail_days]')['value'], '30')
         self.assertEqual(section.select_one('[name=cache_days]')['value'], '30')
-        self.assertIn('Bereinigbar: 3.0 MiB', section.get_text(' ', strip=True))
         self.assertEqual(store.settings(), self.original)
 
     def test_02_valid_policy_preserves_other_settings(self):
@@ -144,7 +135,7 @@ class StorageUI(unittest.TestCase):
                        store.digest(b'original'), store.digest(text), text, '[]', None, None, None))
         response = self.client.get('/documents/' + sid)
         self.assertEqual(response.status_code, 200)
-        self.assertIn('Originaldatei automatisch bereinigt', response.text)
+        self.assertIn('Originaldatei aus dem Archiv entfernt', response.text)
         self.assertIn(text, response.text)
         self.assertNotIn('href="/None', response.text)
         self.assertNotIn('Originaldatei herunterladen', response.text)

@@ -107,12 +107,12 @@ def _instant(at):
     return at.replace(tzinfo=timezone.utc) if at.tzinfo is None else at.astimezone(timezone.utc)
 
 
-def _safe(root, relative):
+def _safe(root, relative, areas=('artifacts', 'ocr')):
     if not isinstance(relative, str) or '\\' in relative or ':' in relative or '\x00' in relative:
         raise ValueError('Unsicherer Archivverweis; keine Bereinigung.')
     rel = PurePosixPath(relative)
     if (rel.is_absolute() or len(rel.parts) < 2 or relative != rel.as_posix()
-            or any(p in ('.', '..') for p in rel.parts) or rel.parts[0] not in ('artifacts', 'ocr')):
+            or any(p in ('.', '..') for p in rel.parts) or rel.parts[0] not in areas):
         raise ValueError('Archivverweis außerhalb des verwalteten Bereichs.')
     path = root.joinpath(*rel.parts)
     if path.resolve() != path or any(p.is_symlink() for p in (path, *path.parents)):
@@ -125,10 +125,10 @@ def _safe(root, relative):
 def _files(root, directory):
     """Never follow a directory link, including links to another DATA subtree."""
     base = root / directory
+    if base.is_symlink() or (base.exists() and not base.is_dir()):
+        raise ValueError('Unsicherer Ablagebereich; keine Bereinigung.')
     if not base.exists():
         return {}
-    if base.is_symlink() or not base.is_dir():
-        raise ValueError('Unsicherer Ablagebereich; keine Bereinigung.')
     found = {}
     for current, dirs, files in os.walk(base, followlinks=False):
         parent = Path(current)
@@ -137,7 +137,7 @@ def _files(root, directory):
         for name in files:
             path = parent / name
             relative = path.relative_to(root).as_posix()
-            _safe(root, relative)
+            _safe(root, relative, (directory,))
             try:
                 info = path.stat()
             except FileNotFoundError:
@@ -395,7 +395,10 @@ def _plan(root, connection, at, selected):
 
 def _result(plan, selected, at, last):
     files = plan['files']
+    signature = [selected, {p: plan['all_files'][p] for p in sorted(files)}, sorted(plan['prune']),
+                 {field: sorted(paths) for field, paths in plan['clear'].items()}]
     return {'status': 'skipped' if plan['skipped'] else 'preview', 'checked_at': at.isoformat(),
+            'fingerprint': store.digest(json.dumps(signature, sort_keys=True)),
             'policy': selected, 'usage': plan['usage'], 'last_cleanup': last,
             'candidates': {'files': len(files), 'bytes': sum(plan['all_files'][p]['size'] for p in files),
                            'document_files': sum(p.startswith('artifacts/objects/') for p in files),
@@ -427,7 +430,7 @@ def inspect(at=None):
                     'last_cleanup': last, 'skipped': [str(error)]}
 
 
-def cleanup(dry_run=False, at=None):
+def cleanup(dry_run=False, at=None, *, expected=None):
     """Expire unneeded originals/details. Caller must also hold engine.BUSY.
 
     Clear references first, commit, then unlink while holding the archive lock.
@@ -450,6 +453,8 @@ def cleanup(dry_run=False, at=None):
             result = _result(plan, selected, at, last)
             if plan['skipped']:
                 return result
+            if expected is not None and result['fingerprint'] != expected:
+                raise ValueError('Die Auswahl hat sich seit der Vorschau geändert. Bitte erneut prüfen.')
             for field, paths in plan['clear'].items():
                 for relative in paths & plan['files']:
                     connection.execute('UPDATE snapshots SET ' + field + '=NULL WHERE ' + field + '=?', (relative,))

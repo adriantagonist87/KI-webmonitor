@@ -2,7 +2,7 @@
 import json,smtplib,ssl
 from datetime import datetime,timedelta,timezone
 import store,distributions,email_reports
-TERMINAL={'sent','preview','imported','skipped','cancelled','unknown'}
+TERMINAL={'sent','preview','imported','skipped','cancelled','unknown','purged'}
 class TransportFailure(Exception):
     def __init__(self,definite=False):self.definite=definite
 

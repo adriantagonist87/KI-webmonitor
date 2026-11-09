@@ -1,0 +1,133 @@
+{% from 'macros.html' import icon,heading %}
+{{heading('Wartung & Bereinigung')}}
+{% if maintenance_error %}<p class="error-banner" role="alert">{{maintenance_error}}</p>{% endif %}
+{% if result %}
+<section class="card" id="ergebnis" role="status">
+  <h2>{{'Neuer Vergleichsstand vorgemerkt' if result.reset else 'Bereinigung abgeschlossen'}}</h2>
+  <p>{{result.removed_files}} Dateien entfernt · {{result.removed_bytes|storage_size}} an Dateigröße</p>
+  {% if result.reset %}<p>Die nächste reguläre oder manuell gestartete Prüfung erfasst den neuen Ausgangsstand.</p>{% endif %}
+  {% if result.pending %}<p>{{result.pending}} Dateien stehen zur erneuten Bereinigung bereit.</p>{% endif %}
+  {% if result.warning %}<p>Einige Archivdateien konnten nicht entfernt werden.</p>{% endif %}
+</section>
+{% endif %}
+
+{% if storage %}
+{% set unavailable = busy or manual or storage.active %}
+<section class="card" id="speicherbelegung">
+  <h2>Speicherübersicht</h2>
+  <div class="maintenance-totals">
+    <div><span>App-Daten</span><strong>{{storage.usage.total_bytes|storage_size}}</strong></div>
+    <div><span>Freier Platz auf dem Datenvolume</span><strong>{{storage.disk.free|storage_size}}</strong></div>
+    <div><span>Belegt auf dem Datenvolume</span><strong>{{storage.disk.used|storage_size}} <small>von {{storage.disk.total|storage_size}}</small></strong></div>
+  </div>
+  <dl class="maintenance-storage">
+    {% for key,label in [('documents_bytes','Originaldateien'),('history_files_bytes','Prüfbelege'),('reports_bytes','Berichte und E-Mail-Archive'),('logs_bytes','App-Protokolldateien'),('ocr_bytes','Historischer Texterkennungs-Cache'),('database_bytes','SQLite-Datenbank'),('backup_bytes','Import-Sicherungskopien'),('browser_bytes','Browserdateien im App-Volume'),('other_bytes','Weitere App-Dateien')] %}
+    <div><dt>{{label}}</dt><dd>{{storage.usage[key]|storage_size}}</dd></div>
+    {% endfor %}
+  </dl>
+  <p class="field-help">SQLite kann {{storage.reusable|storage_size}} intern wiederverwenden. Freier Plattenplatz und intern wiederverwendbarer Datenbankplatz sind getrennte Werte.</p>
+  <p class="field-help">Das separate Brave-Profil, Docker-Containerlogs und externe Sicherungen werden am Host verwaltet. Import-Sicherungskopien bleiben erhalten. <a href="/transfer">Export / Import öffnen</a></p>
+</section>
+
+{% if unavailable %}<p class="warning" role="status">Für eine Bereinigung müssen alle Prüfungen abgeschlossen und der manuelle Browsermodus beendet sein.</p>{% endif %}
+
+{% if planned %}
+<section class="card" id="vorschau">
+  <h2>{{'Vorschau für den Neustart' if planned.reset else 'Bereinigungsvorschau'}}</h2>
+  {% if planned.policy %}
+  <p>{{planned.snapshots}} überzählige Archivaufnahmen nach den gespeicherten Regeln.</p>
+  {% else %}
+  {% if planned.projects %}<details><summary>{{'1 ausgewähltes Projekt' if planned.projects|length == 1 else (planned.projects|length|string) ~ ' ausgewählte Projekte'}}</summary><ul>{% for name in planned.projects %}<li>{{name}}</li>{% endfor %}</ul></details>{% endif %}
+  <ul>
+    <li>Prüfungen mit Vergleichsdaten und Belegen · {{planned.runs}}</li>
+    <li>{{planned.documents}} zusätzliche Dokumentverweise auf Originaldateien</li>
+    <li>{{planned.reports}} archivierte Berichte und E-Mail-Fassungen</li>
+    <li>{{planned.logs}} zusätzlich ausgewählte Prüf- oder Versandeinträge</li>
+  </ul>
+  {% if planned.protected %}<p>{{planned.protected}} Prüfungen bleiben als aktueller Stand, Vergleichsbasis oder für wartenden Telegram-Versand erhalten.</p>{% endif %}
+  {% if planned.deferred %}<p>{{planned.deferred}} Berichtsfassungen bleiben wegen offener Versandaufträge erhalten.</p>{% endif %}
+  {% endif %}
+  <p><strong>{{planned.files}} löschbare Dateien · {{planned.bytes|storage_size}}</strong></p>
+  {% if planned.actionable %}
+  <form method="post" action="/maintenance/cleanup#ergebnis">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="kind" value="{{options.kind}}">
+    <input type="hidden" name="fingerprint" value="{{planned.fingerprint}}">
+    <input type="hidden" name="mode" value="{{options.mode}}">
+    <input type="hidden" name="amount" value="{{options.amount if options.amount is not none else ''}}">
+    {% for area,pid in options['items'] %}<input type="hidden" name="item" value="{{area}}:{{pid}}">{% endfor %}
+    {% for area in options['global'] %}<input type="hidden" name="global" value="{{area}}">{% endfor %}
+    <label class="check-label"><input type="checkbox" name="confirm" required>Auswahl endgültig löschen</label>
+    {% if planned.reset %}<div class="field-group"><label for="reset-confirmation">Zur Bestätigung NEUSTART eingeben</label><input id="reset-confirmation" name="reset_confirmation" required autocomplete="off" pattern="NEUSTART"></div>{% endif %}
+    <div class="form-footer"><button class="danger" {% if unavailable %}disabled{% endif %}>{{icon('trash')}}{{'Alle Projekte zurücksetzen' if planned.reset else 'Auswahl bereinigen'}}</button><a class="button neutral" href="/maintenance">Abbrechen</a></div>
+  </form>
+  {% else %}<p class="field-help">Für diese Auswahl gibt es derzeit nichts zu bereinigen.</p>{% endif %}
+</section>
+{% endif %}
+
+<section class="card" id="neustart">
+  <h2>Alle Projekte auf Erstauswertung zurücksetzen</h2>
+  <p>Entfernt den gesamten Prüfverlauf, die erkannten Änderungen und die zugehörigen Archivdateien. Die nächste Prüfung jedes Projekts baut einen neuen Vergleichsstand auf. Projekte, Prompts, Zeitpläne, Zugänge, Makros und gespeicherte Wochenberichte bleiben erhalten. Alte Berichtslinks zu gelöschten Prüfungen können danach ins Leere führen.</p>
+  <p class="field-help">Über <a href="/transfer">Export / Import</a> lässt sich der Prüfverlauf vorab als Archiv sichern.</p>
+  <form method="post" action="/maintenance/preview#vorschau">
+    <input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="kind" value="reset">
+    <button class="secondary" {% if unavailable or not storage.projects %}disabled{% endif %}>{{icon('eye')}}Neustart prüfen</button>
+  </form>
+</section>
+
+<form method="post" action="/maintenance/preview#vorschau" class="card" id="auswahl">
+  <input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="kind" value="cleanup">
+  <h2>Bereinigung auswählen</h2>
+  <p class="field-help">Die Auswahl „Alle Projekte“ gilt je Spalte. Gemeinsame Dateien können mehreren Projekten zugeordnet sein und werden erst entfernt, wenn kein verbleibender Archivverweis sie benötigt. Der Prüfverlauf zeigt die Dateigröße der Belege plus den Umfang gespeicherter Inhalte in SQLite.</p>
+  {% set selected = options['items'] if options else [] %}
+  {% set columns = [('documents','Originaldateien'),('history','Prüfverlauf'),('events','Protokolle')] %}
+  <div class="tablewrap maintenance-table" tabindex="0" role="region" aria-label="Speicherbelegung und Bereinigung je Projekt">
+    <table>
+      <thead><tr><th scope="col">Projekt</th>{% for key,label in columns %}<th scope="col">{{label}}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% if storage.projects %}<tr><th scope="row">Alle Projekte</th>
+        {% for key,label in columns %}<td><input type="checkbox" name="item" value="{{key}}:*" aria-label="{{label}} aller Projekte bereinigen" {% if (key,'*') in selected %}checked{% endif %}></td>{% endfor %}
+      </tr>{% endif %}
+      {% for project in storage.projects %}
+        <tr><th scope="row"><a href="{{project.url}}">{{project.name}}</a>{% if not project.enabled %}<span class="field-help"> · Pausiert</span>{% endif %}</th>
+        {% for key,label in columns %}
+          <td><label class="check-label"><input type="checkbox" name="item" value="{{key}}:{{project.id}}" aria-label="{{label}} von {{project.name}} bereinigen" {% if (key,project.id) in selected %}checked{% endif %}>
+            <span>{% if key == 'events' %}{{project.event_bytes|storage_size}}<small>{{project.events}} {{'Eintrag' if project.events == 1 else 'Einträge'}}</small>{% else %}{{project[key]|storage_size}}{% if key == 'history' %}<small>{{project.runs}} {{'Prüfung' if project.runs == 1 else 'Prüfungen'}}</small>{% endif %}{% endif %}</span>
+          </label></td>
+        {% endfor %}</tr>
+      {% else %}<tr><td colspan="4">Keine Projekte vorhanden.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="field-help">„Originaldateien“ entfernt den Download aus dem Archiv. Prüfsummen bleiben für den Vergleich verfügbar. „Prüfverlauf“ lässt die aktuellen Vergleichsstände stehen.</p>
+  <div class="form-grid">
+    <div class="field-group"><label for="maintenance-mode">Prüfverlauf aufbewahren</label><select name="mode" id="maintenance-mode">
+      {% for value,label in [('all','Nur aktuelle Vergleichsstände'),('last','Die letzten Prüfungen je Projekt'),('days','Die Prüfungen der letzten Tage')] %}<option value="{{value}}" {% if options and options.mode == value %}selected{% endif %}>{{label}}</option>{% endfor %}
+    </select></div>
+    <div class="field-group"><label for="maintenance-amount">Anzahl der Prüfungen oder Tage</label><input type="number" id="maintenance-amount" name="amount" min="1" max="36500" value="{{options.amount if options and options.amount else 2}}"></div>
+  </div>
+  <h3>Globale Ablagen</h3>
+  {% set global_selected = options['global'] if options else [] %}
+  {% for key,label in [('reports','Archivierte Wochenberichte und E-Mail-Fassungen'),('logs','App-Protokolle und Versandverläufe'),('cache','Historischer Texterkennungs-Cache')] %}
+    <label class="check-label"><input type="checkbox" name="global" value="{{key}}" {% if key in global_selected %}checked{% endif %}>{{label}}</label>
+  {% endfor %}
+  <p class="field-help">Bereits zugestellte E-Mails bleiben im Postfach des Empfängers. Offene Versandaufträge bleiben verfügbar.</p>
+  <label class="check-label"><input type="checkbox" name="all_areas"><strong>Alle Projektbereiche und globalen Ablagen auswählen</strong></label>
+  <div class="form-footer"><button {% if unavailable %}disabled{% endif %}>{{icon('eye')}}Auswahl prüfen</button></div>
+</form>
+
+{% if storage.pending %}<section class="card">
+  <h2>Verbliebene Dateien</h2><p>{{storage.pending}} Dateien aus früheren Bereinigungen stehen zur erneuten Prüfung bereit.</p>
+  <form method="post" action="/maintenance/preview#vorschau"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="kind" value="retry"><button class="secondary" {% if unavailable %}disabled{% endif %}>Erneut prüfen</button></form>
+</section>{% endif %}
+
+<details class="card" id="speicher"><summary>Automatische Speicherregeln</summary><div class="details-body">
+  <p class="field-help">Diese Regeln werden zwischen Prüfungen angewendet. Aktuelle Vergleichsdaten, relevante Änderungsnachweise und Berichte bleiben dabei erhalten.</p>
+  <form method="post" action="/maintenance/storage" data-guard-unsaved><input type="hidden" name="csrf" value="{{csrf}}"><div class="form-grid">
+    <div class="field-group"><label for="storage-versions">Originaldateien je Quelle</label><select id="storage-versions" name="document_versions">{% for number,label in [(1,'Nur aktuelle Version'),(2,'Aktuelle Version und eine Vorversion'),(3,'Aktuelle Version und zwei Vorversionen')] %}<option value="{{number}}" {% if storage_policy.document_versions==number %}selected{% endif %}>{{label}}</option>{% endfor %}</select></div>
+    <div class="field-group"><label for="storage-details">Prüfdetails aufbewahren (Tage)</label><input id="storage-details" name="detail_days" type="number" min="7" max="365" required value="{{storage_policy.detail_days}}"></div>
+    <div class="field-group"><label for="storage-cache">Historischen Texterkennungs-Cache aufbewahren (Tage)</label><input id="storage-cache" name="cache_days" type="number" min="1" max="90" required value="{{storage_policy.cache_days}}"></div>
+  </div><div class="form-footer"><button>{{icon('check')}}Speicherregeln speichern</button></div></form>
+  <form method="post" action="/maintenance/preview#vorschau"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="kind" value="policy"><button class="secondary" {% if unavailable %}disabled{% endif %}>{{icon('eye')}}Bereinigung nach Regeln prüfen</button></form>
+</div></details>
+{% endif %}

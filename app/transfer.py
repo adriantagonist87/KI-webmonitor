@@ -620,7 +620,7 @@ def import_package(path,payload,apply_settings=True,apply_secrets=False,activate
                                           (item['retry_run_id'],item['source_run_id']))
                             continue
                     # Imported reports are archival records; never resend historical failed mail.
-                    if table=='reports' and item['mail_status']!='sent':item.update(mail_status='imported',next_attempt=None)
+                    if table=='reports' and item['mail_status'] not in ('sent','purged'):item.update(mail_status='imported',next_attempt=None)
                     if table=='run_retries' and item['state'] in ('pending','queued','running'):item['state']='cancelled'
                     if table=='snapshots' and item['text'] is None:
                         item['text']=read_snapshot_text(archive,item)

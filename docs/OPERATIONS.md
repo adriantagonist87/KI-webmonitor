@@ -8,21 +8,28 @@ nach Prozessabbruch/Hostneustart erneut; ein Zustand `unhealthy` allein löst
 keinen Neustart aus. Browserprofile und SQLite niemals gleichzeitig in zwei
 Installationen verwenden.
 
-## Prüfverlauf aller Projekte bereinigen
+## Wartung und Bereinigung
 
-Unter **Einstellungen → Prüfverlauf** die neuesten Prüfungen je Projekt,
-einen Zeitraum in Tagen oder den gesamten Prüfverlauf auswählen. Die Vorschau
-zeigt die Anzahl der Prüfungen und Projekte vor der endgültigen Bestätigung.
-Ein Zeitraum bezieht sich auf das Abschlussdatum der Prüfung. Laufende oder
-wartende Prüfungen müssen vorher abgeschlossen sein.
+**Wartung & Bereinigung** zeigt die App-Daten, den freien Platz auf dem
+Datenvolume und die Belegung je Projekt. Originaldateien, Prüfverlauf und
+Protokolle sind je Projekt oder für alle Projekte auswählbar. Hinzu kommen
+globale Archive für Wochenberichte und E-Mail-Fassungen, Versandprotokolle und
+der historische Texterkennungs-Cache. Die Vorschau beziffert die betroffenen
+Einträge und Dateien. Für die Ausführung müssen alle Prüfungen abgeschlossen
+sein und der manuelle Browsermodus muss beendet sein.
 
-Die Bereinigung entfernt die ausgewählten Läufe samt Änderungen und nicht
-mehr benötigten Belegen. Gemeinsam genutzte Dateien bleiben verfügbar, solange
-eine verbleibende Prüfung sie referenziert. Projekte, Zeitpläne und bereits
-gespeicherte Wochenberichte bleiben erhalten. Verweise alter Berichte auf
-gelöschte Prüfungen sind danach nicht mehr aufrufbar. Quellen ohne verbleibenden
-Vergleichsstand werden im nächsten Lauf neu erfasst. SQLite verwendet die
-freigewordenen Datenbankseiten für neue Einträge.
+Eine Bereinigung des Prüfverlaufs behält die aktuellen Vergleichsstände.
+Gelöschte Originaldateien behalten ihre Prüfsummen im Verlauf. Gemeinsam
+genutzte Dateien bleiben verfügbar, solange ein Archivverweis sie benötigt.
+Berichte mit offenen Versandaufträgen bleiben erhalten. SQLite verwendet
+freigewordene Datenbankseiten intern für neue Einträge. Docker-Containerlogs,
+das separate Brave-Profil und externe Backups werden am Host verwaltet.
+
+**Alle Projekte auf Erstauswertung zurücksetzen** entfernt die Prüfverläufe
+und Vergleichsstände nach eigener Vorschau und Bestätigung. Die nächste
+Prüfung erfasst einen neuen Ausgangsstand. Projektkonfiguration, Zugänge,
+Makros, Zeitpläne und Wochenberichte bleiben erhalten. Links aus älteren
+Berichten können auf gelöschte Prüfungen verweisen.
 
 Vor einer endgültigen Löschung kann unter **Export / Import** ein ZIP mit
 Verlauf gespeichert werden. Seit 1.5.18 werden die Seitentexte darin als

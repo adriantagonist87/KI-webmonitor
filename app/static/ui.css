@@ -227,3 +227,16 @@ html[data-motion=off] .notice-button{animation:none}
 .files-table .files-date-column{width:9.5rem}
 .files-table .files-download-column{width:max(52px,5.75rem);padding-inline:6px;text-align:center;vertical-align:middle}
 .file-document-name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;line-height:1.5;font-weight:500}
+
+/* Maintenance shows filesystem totals separately from project estimates. */
+.maintenance-totals,.maintenance-storage{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:.7rem;margin:1rem 0}
+.maintenance-totals>div,.maintenance-storage>div{padding:.65rem .8rem;background:var(--soft);border:1px solid var(--stroke);border-radius:.6rem}
+.maintenance-totals span,.maintenance-storage dt{display:block;color:var(--secondary);font-size:.85rem}
+.maintenance-totals strong{display:block;font-size:1.18rem}
+.maintenance-storage dd{margin:0;font-weight:600}
+.maintenance-table{margin:1rem 0}
+.maintenance-table table{min-width:34rem}
+.maintenance-table th[scope=row]{text-transform:none;letter-spacing:normal;overflow-wrap:anywhere}
+.maintenance-table .check-label{margin:0;white-space:nowrap}
+.maintenance-table small{display:block;color:var(--subtle)}
+#speicher form+form{margin-top:1rem}
