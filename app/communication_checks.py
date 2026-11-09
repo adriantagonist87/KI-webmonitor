@@ -71,17 +71,32 @@ class Communications(unittest.TestCase):
         self.assertIsNotNone(soup.select_one('a.nav-link[href="/smtp"]'))
         self.assertIsNotNone(soup.select_one('select[name=telegram_mode]'))
 
-    def test_05_env_fields_locked_and_forged_values_ignored(self):
+    def test_05_telegram_form_overrides_stack_defaults(self):
+        store.save_json(store.CONFIG,{})
+        store.save_json(store.SECRETS,{})
+        web_token='987654321:'+('WEB_SYNTHETIC_'*3)
         with patch.dict(os.environ,{'KIWM_TELEGRAM_BOT_TOKEN':TOKEN,'KIWM_TELEGRAM_CHAT_ID':'99999','KIWM_TELEGRAM_MODE':'all'}):
-            soup=BeautifulSoup(self.client.get('/telegram').text,'html.parser');self.assertTrue(soup.select_one('[name=telegram_token]').has_attr('readonly'))
-            self.assertEqual(self.post('/telegram/save',telegram_chat_id='11111',telegram_mode='off',telegram_token='invalid',clear_secret='on').status_code,303)
-            self.assertEqual(store.settings()['telegram_chat_id'],'99999');self.assertEqual(store.credentials()['telegram_token'],TOKEN)
-        self.assertEqual(store.persisted_settings()['telegram_chat_id'],'12345')
+            soup=BeautifulSoup(self.client.get('/telegram').text,'html.parser')
+            mode=soup.select_one('[name=telegram_mode]')
+            self.assertFalse(mode.has_attr('disabled'))
+            self.assertEqual(mode.select_one('option[selected]')['value'],'all')
+            self.assertEqual(mode['data-config-source'],'environment')
+            self.assertFalse(soup.select_one('[name=telegram_token]').has_attr('readonly'))
+            self.assertEqual(store.credentials()['telegram_token'],TOKEN)
+            self.assertEqual(self.post('/telegram/save',telegram_chat_id='11111',telegram_mode='off',telegram_token=web_token).status_code,303)
+            self.assertEqual(store.settings()['telegram_chat_id'],'11111')
+            self.assertEqual(store.settings()['telegram_mode'],'off')
+            self.assertEqual(store.credentials()['telegram_token'],web_token)
+            self.assertNotIn(web_token,self.client.get('/telegram').text)
+        self.assertEqual(store.persisted_settings()['telegram_chat_id'],'11111')
 
     def test_06_ui_token_kept_or_cleared_and_no_env_persisted(self):
         self.assertEqual(self.post('/telegram/save',telegram_chat_id='-12345',telegram_mode='all').status_code,303)
         self.assertEqual(store.credentials()['telegram_token'],TOKEN)
-        self.post('/telegram/save',telegram_chat_id='12345',telegram_mode='off',clear_secret='on')
+        fallback='111122223:'+('STACK_SYNTHETIC_'*3)
+        with patch.dict(os.environ,{'KIWM_TELEGRAM_BOT_TOKEN':fallback}):
+            self.post('/telegram/save',telegram_chat_id='12345',telegram_mode='off',clear_secret='on')
+            self.assertEqual(store.credentials()['telegram_token'],fallback)
         self.assertNotIn('telegram_token',store.persisted_credentials())
 
     def test_07_connection_actions_require_csrf(self):
@@ -93,7 +108,9 @@ class Communications(unittest.TestCase):
         self.assertFalse(notifications.enabled(p,{'telegram_mode':'off'}));self.assertFalse(notifications.enabled(p,{'telegram_mode':'projects'}))
         self.assertTrue(notifications.enabled(p,{'telegram_mode':'all'}));p['telegram_enabled']=1
         self.assertTrue(notifications.enabled(p,{'telegram_mode':'projects'}))
-        self.post('/settings/telegram',telegram_mode='off');self.assertEqual(store.settings()['telegram_mode'],'off')
+        with patch.dict(os.environ,{'KIWM_TELEGRAM_MODE':'all'}):
+            self.post('/settings/telegram',telegram_mode='off')
+            self.assertEqual(store.settings()['telegram_mode'],'off')
 
     def test_09_unchanged_irrelevant_uncertain_and_baseline_are_silent(self):
         for args in ({'changed':False},{'relevance':'irrelevant'},{'relevance':'uncertain'},{'baseline':True}):notifications.queue_run(self.run_record(**args))
@@ -120,6 +137,8 @@ class Communications(unittest.TestCase):
         asyncio.run(notifications.dispatch_one());self.assertEqual(store.one('SELECT status FROM notifications')['status'],'cancelled')
 
     def test_14_app_gateway_bot_end_to_end(self):
+        self.enterContext(patch.dict(os.environ,{'KIWM_TELEGRAM_MODE':'off','KIWM_TELEGRAM_CHAT_ID':'99999',
+                                                'KIWM_TELEGRAM_BOT_TOKEN':'111122223:'+('STACK_SYNTHETIC_'*3)}))
         store.execute("UPDATE projects SET name='Testprojekt 🧪' WHERE id='project'")
         notifications.queue_run(self.run_record());calls=[];real_async=httpx.AsyncClient;real_sync=httpx.Client
         def bot(req):calls.append(req);return httpx.Response(200,json={'ok':True,'result':{'message_id':1}})
@@ -127,7 +146,8 @@ class Communications(unittest.TestCase):
         def asynchronous(*a,**k):return real_async(transport=httpx.ASGITransport(app=gateway.app))
         with patch.object(httpx,'AsyncClient',side_effect=asynchronous),patch.object(httpx,'Client',side_effect=sync):asyncio.run(notifications.dispatch_one())
         self.assertEqual(store.one('SELECT status FROM notifications')['status'],'sent');self.assertEqual(len(calls),1)
-        self.assertEqual(calls[0].url.host,'api.telegram.org');payload=json.loads(calls[0].content)
+        self.assertEqual(calls[0].url.host,'api.telegram.org');self.assertIn(TOKEN,calls[0].url.path)
+        payload=json.loads(calls[0].content)
         self.assertEqual(payload['chat_id'],'12345');self.assertIn('42 Tage',payload['text']);self.assertNotIn('parse_mode',payload)
         entity, = payload['entities']
         self.assertEqual(entity['type'], 'text_link')
@@ -197,12 +217,26 @@ class Communications(unittest.TestCase):
             transport.smtp_probe(True);message=c.send_message.call_args.args[0]
             self.assertEqual(message.get_content_type(),'multipart/alternative');self.assertEqual(message['To'],'to@example.test')
 
-    def test_24_smtp_settings_env_precedence_and_password_private(self):
+    def test_24_smtp_form_overrides_stack_defaults_and_keeps_password_private(self):
+        fields={'smtp_host':'web.example.test','smtp_port':'111','smtp_tls':'ssl','smtp_from':'from@example.test','smtp_to':'to@example.test'}
         with patch.dict(os.environ,{'KIWM_SMTP_HOST':'env.example.test','KIWM_SMTP_PORT':'465','KIWM_SMTP_PASSWORD':'SYNTHETIC-ENV-PASSWORD','KIWM_SMTP_ENABLED':'false'}):
-            response=self.post('/settings/smtp',smtp_host='forged.example.test',smtp_port='111',smtp_tls='ssl',smtp_from='from@example.test',smtp_to='to@example.test',smtp_password='forged',smtp_enabled='on')
-            self.assertEqual(response.status_code,303);self.assertEqual(store.settings()['smtp_host'],'env.example.test');self.assertFalse(store.settings()['smtp_enabled'])
-            self.assertNotIn('SYNTHETIC-ENV-PASSWORD',self.client.get('/smtp').text)
-        self.assertNotIn('smtp_password',store.persisted_credentials())
+            initial=self.client.get('/smtp').text
+            soup=BeautifulSoup(initial,'html.parser')
+            checkbox=soup.select_one('[name=smtp_enabled]')
+            self.assertFalse(checkbox.has_attr('disabled'))
+            self.assertFalse(checkbox.has_attr('checked'))
+            self.assertEqual(checkbox['data-config-source'],'environment')
+            self.assertNotIn('SYNTHETIC-ENV-PASSWORD',initial)
+            self.assertEqual(self.post('/settings/smtp',**fields,smtp_enabled='on',smtp_password='synthetic-web-password').status_code,303)
+            self.assertEqual(store.settings()['smtp_host'],'web.example.test')
+            self.assertEqual(store.settings()['smtp_port'],111)
+            self.assertIs(store.settings()['smtp_enabled'],True)
+            self.assertEqual(store.credentials()['smtp_password'],'synthetic-web-password')
+            self.assertNotIn('synthetic-web-password',self.client.get('/smtp').text)
+        with patch.dict(os.environ,{'KIWM_SMTP_ENABLED':'true'}):
+            self.assertEqual(self.post('/settings/smtp',**fields).status_code,303)
+            self.assertIs(store.settings()['smtp_enabled'],False)
+        self.assertEqual(store.persisted_credentials()['smtp_password'],'synthetic-web-password')
 
     def test_25_test_buttons_store_sanitized_status(self):
         real=httpx.AsyncClient
@@ -237,6 +271,8 @@ class Communications(unittest.TestCase):
         with patch.dict(os.environ,{'KIWM_SMTP_PORT':'invalid','KIWM_TELEGRAM_BOT_TOKEN':'invalid'}):
             self.assertEqual(self.client.get('/').status_code,200)
             self.assertIn('smtp_port',store.settings()['_communication_errors'])
+            self.assertEqual(store.credentials()['telegram_token'],TOKEN)
+            store.save_json(store.SECRETS,{})
             self.assertIn('telegram_token',store.credentials()['_communication_errors'])
             self.assertNotIn('invalid',self.client.get('/telegram').text)
 

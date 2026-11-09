@@ -1,31 +1,36 @@
+{% macro stack_default(source) %}
+{% if source.environment %}<p class="field-help">Vorgabe aus dem Stack · <code>{{source.environment}}</code></p>{% endif %}
+{% endmacro %}
 {% macro field(name,label,type='text',default='') %}
 {% set source=config_sources.get(name,{}) %}
-<div class="field-group"><label for="{{name}}">{{label}}</label><input id="{{name}}" name="{{name}}" type="{{type}}" value="{{settings.get(name,default)}}" data-config-source="{{source.source|default('ui')}}" {% if source.readonly %}readonly aria-readonly="true"{% endif %}{% if type=='number' %} min="1" max="65535"{% endif %}>
-{% if source.readonly %}<p class="field-help">Portainer / ENV · <code>{{source.environment}}</code></p>{% endif %}</div>
+<div class="field-group"><label for="{{name}}">{{label}}</label><input id="{{name}}" name="{{name}}" type="{{type}}" value="{{settings.get(name,default)}}" data-config-source="{{source.source|default('ui')}}"{% if type=='number' %} min="1" max="65535"{% endif %}>
+{{stack_default(source)}}</div>
 {% endmacro %}
 <div class="page-heading"><h1>{{'Telegram' if page=='telegram' else 'SMTP-Mailserver'}}</h1></div>
-{% for field,error in settings.get('_communication_errors',{}).items() %}{% if field.startswith(page+'_') %}<div class="warning" role="alert">{{error}} · Portainer-Vorgabe prüfen.</div>{% endif %}{% endfor %}
+{% for field,error in settings.get('_communication_errors',{}).items() %}{% if field.startswith(page+'_') %}<div class="warning" role="alert">{{error}}</div>{% endif %}{% endfor %}
 <section class="card">
 <form method="post" action="{{'/telegram/save' if page=='telegram' else '/settings/smtp'}}" data-guard-unsaved>
 <input type="hidden" name="csrf" value="{{csrf}}">
+<p class="field-help">Gespeicherte Web-Einstellungen haben Vorrang vor den Vorgaben des Stacks.</p>
 {% if page=='telegram' %}
 <div class="form-grid">{{field('telegram_chat_id','Chat-ID (Empfänger)')}}
 {% set private='telegram_token' %}
 {% else %}
 <div class="form-grid">{{field('smtp_host','SMTP-Server')}}{{field('smtp_port','Port','number',587)}}
-<div class="field-group"><label for="smtp_tls">Verschlüsselung</label><select id="smtp_tls" name="smtp_tls" {% if config_sources.smtp_tls.readonly %}disabled{% endif %}>{% for value,label in [('starttls','STARTTLS'),('ssl','TLS / SSL')] %}<option value="{{value}}" {% if settings.get('smtp_tls','starttls')==value %}selected{% endif %}>{{label}}</option>{% endfor %}</select>{% if config_sources.smtp_tls.readonly %}<p class="field-help">Portainer / ENV · {{config_sources.smtp_tls.environment}}</p>{% endif %}</div>
+<div class="field-group"><label for="smtp_tls">Verschlüsselung</label><select id="smtp_tls" name="smtp_tls">{% for value,label in [('starttls','STARTTLS'),('ssl','TLS / SSL')] %}<option value="{{value}}" {% if settings.get('smtp_tls','starttls')==value %}selected{% endif %}>{{label}}</option>{% endfor %}</select>{{stack_default(config_sources.smtp_tls)}}</div>
 {{field('smtp_user','Benutzername')}}{{field('smtp_from','Absenderadresse','email')}}{{field('smtp_to','Empfängeradresse','email')}}
 {% set private='smtp_password' %}
 {% endif %}
 {% set source=config_sources.get(private,{}) %}
-<div class="field-group"><label for="{{private}}">{{'Bot-Token' if page=='telegram' else 'Passwort'}}</label><input id="{{private}}" name="{{private}}" type="password" autocomplete="new-password" data-config-source="{{source.source|default('ui')}}" {% if source.readonly %}readonly aria-readonly="true"{% endif %} placeholder="{{'Über Portainer / ENV gesetzt' if source.readonly else 'Leer lassen: gespeicherten Wert behalten'}}">{% if source.readonly %}<p class="field-help">Portainer / ENV · <code>{{source.environment}}</code></p>{% endif %}</div></div>
-<label class="check-label"><input type="checkbox" name="clear_secret" {% if source.readonly %}disabled{% endif %}>Gespeicherten {{'Bot-Token' if page=='telegram' else 'Passwortwert'}} entfernen</label>
+<div class="field-group"><label for="{{private}}">{{'Bot-Token' if page=='telegram' else 'Passwort'}}</label><input id="{{private}}" name="{{private}}" type="password" autocomplete="new-password" data-config-source="{{source.source|default('ui')}}" placeholder="Leer lassen, um den aktuellen Wert zu verwenden">{{stack_default(source)}}</div></div>
+<label class="check-label"><input type="checkbox" name="clear_secret">In der Weboberfläche gespeicherten {{'Bot-Token' if page=='telegram' else 'Passwortwert'}} entfernen</label>
+<p class="field-help">Ist im Stack ein Wert hinterlegt, gilt anschließend diese Vorgabe.</p>
 {% if page=='telegram' %}
 <p class="field-help">Bot mit @BotFather erstellen, den Bot in Telegram öffnen und „Starten“ drücken. Als Ziel die eigene Chat-ID, Gruppen-ID oder den @Kanalnamen eintragen. Die Bot-ID allein ist keine Empfängeradresse. Tokens gehören ausschließlich in dieses Feld oder in Portainer.</p>
 {% include 'telegram_mode.html' %}
 {% else %}
-<label class="check-label"><input type="checkbox" name="smtp_enabled" {% if settings.get('smtp_enabled') %}checked{% endif %} {% if config_sources.smtp_enabled.readonly %}disabled{% endif %}>Wochenberichte per E-Mail versenden</label>
-{% if config_sources.smtp_enabled.readonly %}<p class="field-help">Portainer / ENV · <code>{{config_sources.smtp_enabled.environment}}</code></p>{% endif %}
+<label class="check-label"><input type="checkbox" name="smtp_enabled" data-config-source="{{config_sources.smtp_enabled.source}}" {% if settings.get('smtp_enabled') %}checked{% endif %}>Wochenberichte per E-Mail versenden</label>
+{{stack_default(config_sources.smtp_enabled)}}
 <p class="field-help">Montags um 08:00 Uhr · Europe/Berlin. Ohne aktivierten Versand bleiben die Berichte als Vorschau gespeichert.</p>
 {% endif %}
 <div class="form-footer"><button data-loading="Speichert …">{{icon('check')}}<span data-button-label>Speichern</span></button></div>

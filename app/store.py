@@ -77,7 +77,8 @@ def credentials():
     return communication_config.resolve(configuration.resolve_credentials(persisted_credentials()), communication_config.SECRETS, strict=False)
 
 def configuration_sources():
-    return {**configuration.sources(), **communication_config.sources()}
+    return {**configuration.sources(), **communication_config.sources(settings=persisted_settings(),
+                                                                       credentials=persisted_credentials())}
 
 def next_due(cron, after=None):
     dt = after or datetime.now(TZ)

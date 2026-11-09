@@ -2,9 +2,11 @@
 
 Beide Versandwege haben eigene Einträge in der Sidebar. Einstellungen lassen
 sich in der Oberfläche oder über Portainer-Stackvariablen hinterlegen.
-Nichtleere ENV-Werte haben Vorrang; die betroffenen Felder zeigen die Variable
-an und sind schreibgeschützt. Entfernen/leeren Sie die Variable und aktualisieren
-Sie den Stack, um wieder den gespeicherten Webwert zu verwenden.
+Gespeicherte Webwerte haben Vorrang. Ohne gespeicherten Wert verwendet die App
+eine vorhandene Stack-Vorgabe und zeigt den Namen der Variable am bearbeitbaren
+Feld an. Auch „Aus“ und ein ausgeschalteter SMTP-Schalter werden gespeichert.
+Beim Entfernen eines gespeicherten Passworts oder Tokens gilt wieder ein im
+Stack hinterlegter Wert.
 
 ## Telegram einrichten
 
@@ -70,7 +72,7 @@ bleibt unabhängig davon verfügbar.
 
 ## Portainer-Variablen
 
-Alle Werte sind optional. Leere Werte verwenden die Oberfläche.
+Alle Werte sind optional. Sie dienen als Vorgaben für Felder ohne gespeicherten Webwert.
 
 | Variable | Wert |
 | --- | --- |

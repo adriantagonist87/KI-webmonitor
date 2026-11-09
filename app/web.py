@@ -1187,19 +1187,17 @@ def communication_test_result(channel):
 
 
 async def save_communication(request,channel):
-    form=await request.form();s= persisted_settings();secret=persisted_credentials();sources=configuration_sources()
+    form=await request.form();s=persisted_settings();secret=persisted_credentials()
     fields=tuple(k for k in communication_config.FIELDS if k.startswith(channel+'_'))
     private='smtp_password' if channel=='smtp' else 'telegram_token'
     try:
         for field in fields:
-            if sources[field]['readonly']:continue
             default={'smtp_port':'587','smtp_tls':'starttls','telegram_mode':'off'}.get(field,'')
             value=form.get(field,default)
             if field=='smtp_enabled':value=form.get(field)=='on'
             s[field]=communication_config.validate(field,str(value).strip() if isinstance(value,str) else value)
-        if not sources[private]['readonly']:
-            if form.get(private):secret[private]=communication_config.validate(private,str(form[private]))
-            if form.get('clear_secret')=='on':secret.pop(private,None)
+        if form.get(private):secret[private]=communication_config.validate(private,str(form[private]))
+        if form.get('clear_secret')=='on':secret.pop(private,None)
     except configuration.ConfigurationError as exc:raise HTTPException(400,str(exc)) from None
     save_json(CONFIG,s);save_json(SECRETS,secret)
     return redirect('/'+channel,'smtp_saved' if channel=='smtp' else 'telegram_saved')
@@ -1213,10 +1211,9 @@ async def save_telegram(request:Request):
 @app.post('/settings/telegram')
 async def save_global_telegram(request:Request):
     form=await request.form();s=persisted_settings()
-    if not configuration_sources()['telegram_mode']['readonly']:
-        try:s['telegram_mode']=communication_config.validate('telegram_mode',str(form.get('telegram_mode','off')))
-        except configuration.ConfigurationError as exc:raise HTTPException(400,str(exc)) from None
-        save_json(CONFIG,s)
+    try:s['telegram_mode']=communication_config.validate('telegram_mode',str(form.get('telegram_mode','off')))
+    except configuration.ConfigurationError as exc:raise HTTPException(400,str(exc)) from None
+    save_json(CONFIG,s)
     return redirect('/settings','telegram_saved')
 
 

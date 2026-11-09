@@ -1,4 +1,4 @@
-"""Validated notification settings. Nonempty ENV wins without being saved."""
+"""Validate saved notification settings, with environment defaults for missing fields."""
 import re
 from email.utils import parseaddr
 import configuration as base
@@ -51,23 +51,32 @@ def validate(field, value):
 def resolve(saved, fields, environ=None, *, strict=True):
     result = dict(saved); env = base._environment(environ)
     for field, variable in fields.items():
-        override = base._environment_value(env, variable)
-        if override is not None and field=='smtp_password':override=env[variable]
-        if override is not None: result[field] = override
-        if field in result:
-            try:result[field] = validate(field, result[field])
-            except base.ConfigurationError as exc:
-                if strict:raise
-                result.setdefault('_communication_errors',{})[field]=str(exc)
-                result.pop(field,None)
-                if field=='smtp_enabled':result[field]=False
-                if field=='telegram_mode':result[field]='off'
+        try:
+            if field not in result:
+                fallback = base._environment_value(env, variable)
+                if fallback is None:
+                    continue
+                result[field] = env[variable] if field == 'smtp_password' else fallback
+            result[field] = validate(field, result[field])
+        except base.ConfigurationError as exc:
+            if strict:
+                raise
+            result.setdefault('_communication_errors', {})[field] = str(exc)
+            result.pop(field, None)
+            if field == 'smtp_enabled':
+                result[field] = False
+            if field == 'telegram_mode':
+                result[field] = 'off'
     return result
 
 
-def sources(environ=None):
+def sources(environ=None, *, settings=None, credentials=None):
     env = base._environment(environ)
-    return {field: {'source': 'environment' if base._environment_value(env, variable) is not None else 'ui',
-                    'environment': variable if base._environment_value(env, variable) is not None else None,
-                    'readonly': base._environment_value(env, variable) is not None}
-            for field, variable in {**FIELDS, **SECRETS}.items()}
+    result = {}
+    for field, variable in {**FIELDS, **SECRETS}.items():
+        saved = (credentials if field in SECRETS else settings) or {}
+        value = env.get(variable)
+        fallback = field not in saved and isinstance(value, str) and bool(value.strip())
+        result[field] = {'source': 'environment' if fallback else 'ui',
+                         'environment': variable if fallback else None, 'readonly': False}
+    return result
