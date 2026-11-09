@@ -95,7 +95,7 @@ def telegram_send(text):
     if not chat: raise DeliveryError('Telegram-Chat-ID fehlt.')
     if not isinstance(text,str) or not text:
         raise DeliveryError('Telegram-Nachricht überschreitet die zulässige Länge.')
-    text, entities = telegram_message.with_source_link(text)
+    text, entities = telegram_message.for_delivery(text)
     if len(text.encode('utf-16-le'))//2>4096:
         raise DeliveryError('Telegram-Nachricht überschreitet die zulässige Länge.')
     payload = {'chat_id':chat,'text':text,'link_preview_options':{'is_disabled':True}}

@@ -2,12 +2,14 @@
 import asyncio
 import json
 import logging
+import os
 import re
 from datetime import datetime,timedelta,timezone
-from urllib.parse import urlsplit,unquote
+from urllib.parse import quote,urlsplit,unquote
 import httpx
 import attention
 import email_reports
+import lan_access
 import site_privacy
 import store
 import telegram_message
@@ -39,9 +41,20 @@ def relevant_changes(rid):
     return result
 
 
-def compact(text,limit):
-    text=site_privacy.redact_text(email_reports.plain(text,limit))
+def redact(text):
+    text=site_privacy.redact_text(text)
     return re.sub(r'(?i)(password|passwort|api[_ -]?key|authorization|access_token|refresh_token|bot[_ -]?token)\s*[:=]\s*\S+',r'\1=[entfernt]',text)
+
+
+def compact(text,limit):
+    return redact(email_reports.plain(text,limit))
+
+
+def report_url(run):
+    origin = (lan_access.public_origin(os.environ.get('KIWM_PUBLIC_URL'))
+              or lan_access.lan_origin(os.environ.get('KIWM_LAN_URL')))
+    rid = run.get('id')
+    return origin + '/runs/' + quote(rid, safe='') if origin and rid else None
 
 
 def message(project,run,changes):
@@ -50,14 +63,19 @@ def message(project,run,changes):
         lines.extend(['Prüfung fehlgeschlagen' if run['status']=='failed' else 'Prüfung unvollständig',compact(run.get('error') or 'Nicht alle Quellen konnten geprüft werden.',700)])
     if changes:
         lines.append(str(len(changes))+' Änderung'+('en' if len(changes)!=1 else ''))
+        findings = []
         for row,evidence in changes[:5]:
             assessment=evidence.get('ai_assessment') or {}
             filename=compact(unquote(urlsplit(row['url']).path.rsplit('/',1)[-1]),110) if 'Datei' in row['kind'] or 'Dokument' in row['kind'] else ''
-            lines.append('• '+(filename+' · ' if filename else '')+compact(assessment.get('summary') or assessment.get('reason') or evidence.get('note') or row['kind'],230))
-        if len(changes)>5:lines.append('Weitere Änderungen in der Auswertung.')
-        if run.get('summary'):lines.extend(['KI-Auswertung',compact(run['summary'],1700)])
-    elif run.get('summary') and run['status']=='partial':lines.append(compact(run['summary'],1200))
-    return telegram_message.compose(lines, project['url'])
+            findings.append('• '+(filename+' · ' if filename else '')+compact(assessment.get('summary') or assessment.get('reason') or evidence.get('note') or row['kind'],230))
+        if len(changes)>5:findings.append('Weitere Änderungen in der Auswertung.')
+        lines.append('\n'.join(findings))
+    if run.get('summary') and (changes or run['status'] == 'partial'):
+        blocks = telegram_message.report_blocks(run['summary'])
+        preview = telegram_message.preview(redact('\n\n'.join(blocks)), 2200 if changes else 1200)
+        if preview:
+            lines.extend(['KI-Auswertung', preview])
+    return telegram_message.compose(lines, project['url'], report_url(run))
 
 
 def queue_run(rid):

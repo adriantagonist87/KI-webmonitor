@@ -32,7 +32,7 @@ SUITES = {
     'lan_access_checks': 11,
     'public_access_checks': 9,
     'dashboard_control_checks': 21,
-    'communication_checks': 37,
+    'communication_checks': 38,
     'release_checks': 17,
     'site_safety_checks': 20,
     'site_safety_browser_checks': 7,

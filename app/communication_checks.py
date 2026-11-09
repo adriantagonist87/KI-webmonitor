@@ -138,9 +138,10 @@ class Communications(unittest.TestCase):
 
     def test_14_app_gateway_bot_end_to_end(self):
         self.enterContext(patch.dict(os.environ,{'KIWM_TELEGRAM_MODE':'off','KIWM_TELEGRAM_CHAT_ID':'99999',
-                                                'KIWM_TELEGRAM_BOT_TOKEN':'111122223:'+('STACK_SYNTHETIC_'*3)}))
+                                                'KIWM_TELEGRAM_BOT_TOKEN':'111122223:'+('STACK_SYNTHETIC_'*3),
+                                                'KIWM_PUBLIC_URL':'','KIWM_LAN_URL':'http://192.168.0.10:8765'}))
         store.execute("UPDATE projects SET name='Testprojekt 🧪' WHERE id='project'")
-        notifications.queue_run(self.run_record());calls=[];real_async=httpx.AsyncClient;real_sync=httpx.Client
+        rid=self.run_record();notifications.queue_run(rid);calls=[];real_async=httpx.AsyncClient;real_sync=httpx.Client
         def bot(req):calls.append(req);return httpx.Response(200,json={'ok':True,'result':{'message_id':1}})
         def sync(*a,**k):return real_sync(transport=httpx.MockTransport(bot))
         def asynchronous(*a,**k):return real_async(transport=httpx.ASGITransport(app=gateway.app))
@@ -149,12 +150,14 @@ class Communications(unittest.TestCase):
         self.assertEqual(calls[0].url.host,'api.telegram.org');self.assertIn(TOKEN,calls[0].url.path)
         payload=json.loads(calls[0].content)
         self.assertEqual(payload['chat_id'],'12345');self.assertIn('42 Tage',payload['text']);self.assertNotIn('parse_mode',payload)
-        entity, = payload['entities']
-        self.assertEqual(entity['type'], 'text_link')
-        self.assertEqual(entity['url'], 'https://example.test/')
         text = payload['text'].encode('utf-16-le')
-        offset = entity['offset'] * 2
-        self.assertEqual(text[offset:offset + entity['length'] * 2].decode('utf-16-le'), 'Quelle öffnen')
+        def label(entity):
+            offset = entity['offset'] * 2
+            return text[offset:offset + entity['length'] * 2].decode('utf-16-le')
+        links = {label(e): e['url'] for e in payload['entities'] if e['type'] == 'text_link'}
+        self.assertEqual(links, {'Quelle öffnen':'https://example.test/',
+                                 'Auswertung im Webmonitor öffnen':'http://192.168.0.10:8765/runs/'+rid})
+        self.assertIn('▸ Änderung', [label(e) for e in payload['entities'] if e['type'] == 'bold'])
         asyncio.run(notifications.dispatch_one());self.assertEqual(len(calls),1)
 
     def test_15_telegram_rate_limit_preserves_retry_after(self):
@@ -192,6 +195,26 @@ class Communications(unittest.TestCase):
         for invalid in ('javascript:alert(1)', 'https://user@example.test/', 'https://example.test/a\nb'):
             with self.subTest(invalid=invalid):
                 self.assertEqual(telegram_message.with_source_link(telegram_message.compose(['Test'], invalid))[1], [])
+
+    def test_19b_catalog_preview_keeps_complete_entries_and_drops_technical_details(self):
+        rid = self.run_record()
+        project = store.one('SELECT * FROM projects')
+        run = store.one('SELECT * FROM runs WHERE id=?', (rid,))
+        entries = [f'### [Norm 🧪 {n:02d}](https://example.test/normen/{n}?token=PRIVATE)\n\n'
+                   f'{"Ein neuer fachlicher Anwendungsbereich. " * 8}\n'
+                   f'*Ausgabe: 2026-{n:02d} · Erschienen: 2026-{n:02d}-01*' for n in range(1, 13)]
+        run['summary'] = ('Zwölf neue Normen.\n\n' + '\n\n'.join(entries)
+                          + '\n\n<details><summary>Technik</summary>UNWICHTIGE DETAILS</details>')
+        text, entities = telegram_message.for_delivery(notifications.message(project, run, notifications.relevant_changes(rid)))
+        shown = [line for line in text.splitlines() if line.startswith('▸ Norm')]
+        self.assertGreater(len(shown), 1)
+        self.assertLess(len(shown), len(entries))
+        self.assertEqual(text.count('\nAusgabe:'), len(shown))
+        self.assertIn('▸ Norm 🧪 01\nEin neuer', text)
+        self.assertIn('\n\nWeitere Details im vollständigen Bericht.', text)
+        self.assertNotIn('UNWICHTIGE DETAILS', text)
+        self.assertNotIn('PRIVATE', text)
+        self.assertLessEqual(telegram_message.units(text), 4096)
 
     def test_20_telegram_probe_checks_identity_chat_and_explicit_send(self):
         with patch.object(transport,'telegram_call',return_value={'id':1}) as call:
