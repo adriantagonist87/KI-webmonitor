@@ -39,6 +39,7 @@ import project_icons
 import email_reports
 import distributions
 import report_mail
+import report_schedule
 import mail_message
 import report_images
 from project_urls import PROJECT_DETAIL_ROUTE, detail_path
@@ -172,6 +173,7 @@ NOTICES.update(storage_saved='Speicherregeln gespeichert.', storage_cleaned='Spe
 NOTICES.update(history_cleaned='Prüfverlauf bereinigt.',
                history_files_pending='Prüfverlauf bereinigt. Verbliebene Dateien können über eine neue Vorschau erneut bereinigt werden.')
 NOTICES.update(telegram_saved='Telegram-Einstellungen gespeichert.')
+NOTICES.update(report_schedule_saved='Zeitplan und Zeitraum der E-Mail-Berichte gespeichert.')
 
 def diff_markup(text):
     result = []
@@ -1240,7 +1242,29 @@ async def save_smtp(request: Request):
 
 @app.get('/smtp')
 async def smtp_page(request:Request):
-    return render(request,'smtp',config_sources=configuration_sources(),test_result=communication_test_result('smtp'))
+    return render(request,'smtp',config_sources=configuration_sources(),test_result=communication_test_result('smtp'),
+                  report_plan=report_schedule.current(),report_period_limits=report_schedule.PERIOD_LIMITS)
+
+
+@app.post('/settings/smtp/schedule')
+async def save_report_schedule(request: Request):
+    form = await request.form()
+    try:
+        if not form.get('schedule_mode'):
+            raise ValueError('Wähle eine Wiederholung für die E-Mail-Berichte.')
+        schedule = report_schedule.validate_schedule(scheduling.from_form(form))
+        amount = str(form.get('period_amount', ''))
+        if not amount.isascii() or not amount.isdecimal() or len(amount) > 4:
+            raise ValueError('Gib eine ganze Zahl für den Berichtszeitraum ein.')
+        period = report_schedule.validate_period({'amount': int(amount), 'unit': form.get('period_unit')})
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from None
+    async with engine.REPORT_LOCK:
+        config = persisted_settings()
+        config.update(report_schedule=schedule, report_period=period)
+        save_json(CONFIG, config)
+        report_schedule.current(persist=True)
+    return RedirectResponse('/smtp?notice=report_schedule_saved#berichtszeitplan', 303)
 
 
 @app.get('/telegram')
@@ -1368,7 +1392,7 @@ async def reports(request: Request):
     clause=' WHERE '+' AND '.join(where) if where else ''
     total=one('SELECT count(*) AS n FROM reports'+clause,args)['n'];page=min(page,max(1,(total+49)//50))
     records=rows('SELECT * FROM reports'+clause+' ORDER BY created DESC,audience,distribution_alias,recipient_email,id DESC LIMIT 50 OFFSET ?',(*args,(page-1)*50))
-    return render(request,'reports',reports=records,report_scope=scope,report_distribution=did,report_regular_only=regular_only,report_page=page,report_pages=max(1,(total+49)//50),report_distributions=distributions.all_lists(True),mail_labels=report_mail.LABELS)
+    return render(request,'reports',reports=records,report_scope=scope,report_distribution=did,report_regular_only=regular_only,report_page=page,report_pages=max(1,(total+49)//50),report_distributions=distributions.all_lists(True),mail_labels=report_mail.LABELS,report_plan=report_schedule.current())
 
 @app.post('/reports/test')
 async def report_test():

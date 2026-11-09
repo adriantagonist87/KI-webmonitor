@@ -34,7 +34,9 @@ zusätzliche KI-Anfrage; Dokumente werden weiterhin nur anhand von Hash und Meta
 
 ## Zeitraum, Vorschau und Archiv
 
-Der bestehende Wochenzeitplan bleibt Montag, 08:00 Uhr, Europe/Berlin.
+Der Standardzeitplan ist Montag, 08:00 Uhr, Europe/Berlin. Unter **SMTP-Mailserver**
+lassen sich Versandzeit und Wiederholung ändern. Der Berichtszeitraum in Stunden
+oder Tagen ist unabhängig davon und gilt auch für Vorschauen.
 Ein globaler Adminbericht wird zusammen mit den einzelnen Empfängerfassungen erzeugt.
 Die Fassungen verweisen intern auf ihren globalen Ursprungsbericht.
 

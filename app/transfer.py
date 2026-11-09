@@ -16,6 +16,7 @@ import store
 import configuration
 import communication_config
 import scheduling
+import report_schedule
 import tag_registry
 import site_access
 import project_icons
@@ -46,6 +47,7 @@ PRE_DISTRIBUTION_TABLES = (*LEGACY_TABLES, 'run_retries')
 TABLES = (*PRE_DISTRIBUTION_TABLES, 'report_mail_events')
 SETTING_KEYS = {'omlx_url','agent_model','analysis_model','vision_model','smtp_host','smtp_port','smtp_user','smtp_from','smtp_to','smtp_tls','smtp_enabled','global_schedule','retention'}
 SETTING_KEYS |= set(communication_config.FIELDS)
+SETTING_KEYS |= {'report_schedule', 'report_period'}
 SECRET_KEYS = {'omlx_key','smtp_password','telegram_token'}
 SITE_AUTH_PROVIDER = 'elektro_subscription'
 SITE_AUTH_ORIGIN = 'https://www.elektro.net'
@@ -248,6 +250,9 @@ def validate_settings(value):
         elif key=='global_schedule':
             try:scheduling.validate(val)
             except ValueError:raise Invalid('Ungültiger globaler Prüfzeitplan.') from None
+        elif key in ('report_schedule','report_period'):
+            try:(report_schedule.validate_schedule if key=='report_schedule' else report_schedule.validate_period)(val)
+            except ValueError as error:raise Invalid(str(error)) from None
         elif key=='smtp_enabled':require(type(val) is bool,'Ungültiger Versandstatus.')
         elif key=='smtp_port':require(type(val) is int and 1<=val<=65535,'Ungültiger SMTP-Port.')
         else:require(isinstance(val,str) and len(val)<=2000 and '\x00' not in val and '\r' not in val and '\n' not in val,'Ungültiger Einstellungswert.')

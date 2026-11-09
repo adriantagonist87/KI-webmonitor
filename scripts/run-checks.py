@@ -56,6 +56,7 @@ SUITES = {
     'comparison_validity_checks': 8, 'carousel_content_checks': 15,
     'report_source_checks': 11,
     'weekly_report_checks': 24,
+    'report_schedule_checks': 7,
     'distribution_checks': 36,
     'document_names_checks': 12,
     'github_releases_checks': 4,

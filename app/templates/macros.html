@@ -15,7 +15,7 @@
 </ul>{{caller() if caller is defined else ''}}</section>{% endif %}
 {% endmacro %}
 
-{% macro schedule_fields(value, prefix='schedule') %}
+{% macro schedule_fields(value, prefix='schedule', interval_time=false) %}
 {% set mode=value.get('mode','daily') %}
 <div class="schedule-editor" data-schedule-editor>
  <div class="form-grid schedule-grid">
@@ -23,7 +23,7 @@
    {% for key,label in [('daily','Täglich'),('weekdays','Werktags · Montag bis Freitag'),('weekly','Wöchentlich'),('monthly','Monatlich'),('interval','Alle … Stunden')] %}<option value="{{key}}" {% if mode==key %}selected{% endif %}>{{label}}</option>{% endfor %}
    {% if mode=='custom' %}<option value="custom" selected>Bisheriger Zeitplan beibehalten</option>{% endif %}
   </select></div>
-  <div class="field-group" data-schedule-when="daily weekdays weekly monthly"><label for="{{prefix}}-time">Uhrzeit · Europe/Berlin</label><input id="{{prefix}}-time" name="schedule_time" type="time" value="{{value.get('time','06:00')}}" required></div>
+  <div class="field-group" data-schedule-when="daily weekdays weekly monthly{% if interval_time %} interval{% endif %}"><label for="{{prefix}}-time">Uhrzeit · Europe/Berlin</label><input id="{{prefix}}-time" name="schedule_time" type="time" value="{{value.get('time','06:00')}}" required></div>
   <div class="field-group" data-schedule-when="weekly"><label for="{{prefix}}-weekday">Wochentag</label><select id="{{prefix}}-weekday" name="schedule_weekday">{% for label in ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'] %}<option value="{{loop.index0}}" {% if value.get('weekday',0)|int==loop.index0 %}selected{% endif %}>{{label}}</option>{% endfor %}</select></div>
   <div class="field-group" data-schedule-when="monthly"><label for="{{prefix}}-monthday">Tag im Monat</label><select id="{{prefix}}-monthday" name="schedule_monthday">{% for day in range(1,32) %}<option value="{{day}}" {% if value.get('monthday',1)|int==day %}selected{% endif %}>{{day}}.</option>{% endfor %}</select><p class="field-help">In kürzeren Monaten am letzten Tag.</p></div>
   <div class="field-group" data-schedule-when="interval"><label for="{{prefix}}-interval">Abstand in Stunden</label><select id="{{prefix}}-interval" name="schedule_interval">{% for hours in range(1,169) %}<option value="{{hours}}" {% if value.get('interval',6)|int==hours %}selected{% endif %}>{{hours}} Stunde{{'n' if hours!=1 else ''}}</option>{% endfor %}</select></div>

@@ -27,6 +27,7 @@ from carousel_content import carousel_html
 from comparison_validity import usable_snapshot
 import site_access
 import scheduling
+import report_schedule
 import site_privacy
 import site_safety
 import browser_errors
@@ -1399,12 +1400,15 @@ async def run_job(project, rid):
 
 REPORT_LOCK=asyncio.Lock()
 
-async def make_report(test=False,distribution_id=None):
+async def make_report(test=False,distribution_id=None,*,occurrence=None):
     import report_batches,report_mail,distributions
     if distribution_id and (not test or not distributions.get(distribution_id)):raise ValueError('Verteiler nicht gefunden.')
     async with REPORT_LOCK:
-        end=datetime.now(timezone.utc);start=end-timedelta(days=7)
-        key='test-'+uid() if test else 'week-'+end.astimezone(TZ).strftime('%G-%V')
+        plan=report_schedule.current()
+        if occurrence and (occurrence['schedule'],occurrence['due']) != (plan['schedule'],plan['due']):
+            return None
+        end=datetime.now(timezone.utc);start=report_schedule.window_start(end,plan['period'])
+        key='test-'+uid() if test else report_schedule.occurrence_key(occurrence,end)
         report=one('SELECT * FROM reports WHERE period_key=?',(key,))
         if not report:
             exclude='' if test else ' AND c.id NOT IN (SELECT change_id FROM report_changes)'
@@ -1437,6 +1441,14 @@ async def make_report(test=False,distribution_id=None):
         await report_batches.dispatch(ids[:20],httpx.AsyncClient)
         return report['id']
 
+async def scheduled_report(at):
+    plan = report_schedule.current(at, persist=True)
+    if datetime.fromisoformat(plan['due']) > at:
+        return
+    if await make_report(occurrence=plan):
+        report_schedule.advance(plan, max(at, datetime.now(timezone.utc)))
+
+
 async def scheduler():
     while True:
         try:
@@ -1450,10 +1462,7 @@ async def scheduler():
                 if job:
                     project = one('SELECT * FROM projects WHERE id=?', (job['project_id'],))
                     asyncio.create_task(run_job(project, job['id']))
-            due = one("SELECT value FROM state WHERE key='weekly_due'")['value']
-            if due <= stamp:
-                await make_report()
-                execute("UPDATE state SET value=? WHERE key='weekly_due'", (next_due('0 8 * * 1'),))
+            await scheduled_report(datetime.fromisoformat(stamp))
             import report_mail,report_batches
             report_mail.recover()
             await report_batches.dispatch(report_mail.due_ids(),httpx.AsyncClient)

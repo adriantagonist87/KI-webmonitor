@@ -1,3 +1,4 @@
+{% from 'macros.html' import schedule_fields %}
 {% macro stack_default(source) %}
 {% if source.environment %}<p class="field-help">Vorgabe aus dem Stack · <code>{{source.environment}}</code></p>{% endif %}
 {% endmacro %}
@@ -29,12 +30,33 @@
 <p class="field-help">Bot mit @BotFather erstellen, den Bot in Telegram öffnen und „Starten“ drücken. Als Ziel die eigene Chat-ID, Gruppen-ID oder den @Kanalnamen eintragen. Die Bot-ID allein ist keine Empfängeradresse. Tokens gehören ausschließlich in dieses Feld oder in Portainer.</p>
 {% include 'telegram_mode.html' %}
 {% else %}
-<label class="check-label"><input type="checkbox" name="smtp_enabled" data-config-source="{{config_sources.smtp_enabled.source}}" {% if settings.get('smtp_enabled') %}checked{% endif %}>Wochenberichte per E-Mail versenden</label>
+<label class="check-label"><input type="checkbox" name="smtp_enabled" data-config-source="{{config_sources.smtp_enabled.source}}" {% if settings.get('smtp_enabled') %}checked{% endif %}>Berichte per E-Mail versenden</label>
 {{stack_default(config_sources.smtp_enabled)}}
-<p class="field-help">Montags um 08:00 Uhr · Europe/Berlin. Ohne aktivierten Versand bleiben die Berichte als Vorschau gespeichert.</p>
+<p class="field-help">Bei ausgeschaltetem Versand speichert der Webmonitor die Berichte als Vorschau.</p>
 {% endif %}
 <div class="form-footer"><button data-loading="Speichert …">{{icon('check')}}<span data-button-label>Speichern</span></button></div>
 </form></section>
+{% if page=='smtp' %}
+<section class="card" id="berichtszeitplan">
+  <h2>Zeitplan für E-Mail-Berichte</h2>
+  <p class="field-help">{{report_plan.schedule|schedule_label}} · Nächster geplanter Bericht am {{report_plan.due|localtime}} · Europe/Berlin</p>
+  <form method="post" action="/settings/smtp/schedule" data-guard-unsaved>
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    {{schedule_fields(report_plan.schedule,'report-schedule',interval_time=true)}}
+    <p class="field-help">Stundenintervalle beginnen zur gewählten Uhrzeit und laufen dann im eingestellten Abstand.</p>
+    <h3>Berichtszeitraum</h3>
+    <div class="form-grid">
+      <div class="field-group"><label for="report-period-amount">Anzahl</label><input id="report-period-amount" name="period_amount" type="number" min="1" max="{{report_period_limits.hours}}" step="1" value="{{report_plan.period.amount}}" required></div>
+      <div class="field-group"><label for="report-period-unit">Einheit</label><select id="report-period-unit" name="period_unit">
+        <option value="hours" {% if report_plan.period.unit=='hours' %}selected{% endif %}>Stunden</option>
+        <option value="days" {% if report_plan.period.unit=='days' %}selected{% endif %}>Tage</option>
+      </select></div>
+    </div>
+    <p class="field-help">Der Bericht blickt die gewählte Anzahl Stunden oder Tage zurück. Der Zeitraum gilt auch für Vorschauen. Möglich sind bis zu {{report_period_limits.hours}} Stunden oder {{report_period_limits.days}} Tage.</p>
+    <div class="form-footer"><button>{{icon('check')}}Berichtszeitplan speichern</button></div>
+  </form>
+</section>
+{% endif %}
 <section class="card"><h2>Verbindung prüfen</h2><p class="field-help">Änderungen zuerst speichern. Tests verwenden die gespeicherten Werte oder die Portainer-Vorgaben. Eine Testnachricht wird auch bei ausgeschaltetem automatischem Versand an den eingestellten Empfänger gesendet.</p>
 <form method="post" action="/{{page}}/test"><input type="hidden" name="csrf" value="{{csrf}}"><div class="form-footer"><button class="neutral" name="action" value="connection" data-loading="Prüft …">{{icon('refresh')}}<span data-button-label>Verbindung testen</span></button><button name="action" value="message" data-loading="Sendet …">{{icon('telegram' if page=='telegram' else 'mail')}}<span data-button-label>{{'Testnachricht senden' if page=='telegram' else 'Testmail senden'}}</span></button></div></form>
 {% if test_result %}<div class="{{'info-banner' if test_result.ok else 'warning'}}" role="status"><div><strong>{{test_result.message}}</strong><p class="field-help">{{test_result.time|localtime}} · {{'Versandtest' if test_result.action=='message' else 'Verbindungstest'}}</p></div></div>{% endif %}

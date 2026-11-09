@@ -143,8 +143,6 @@ def init():
         retry_jobs.recover_interrupted(c, now())
     if not one("SELECT key FROM state WHERE key='manual'"):
         execute("INSERT INTO state VALUES('manual','0')")
-    if not one("SELECT key FROM state WHERE key='weekly_due'"):
-        execute("INSERT INTO state VALUES('weekly_due',?)", (next_due('0 8 * * 1'),))
 
 def event(run_id, message):
     execute('INSERT INTO events(run_id,time,message) VALUES(?,?,?)', (run_id, now(), message[:2000]))

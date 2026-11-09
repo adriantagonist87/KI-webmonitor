@@ -14,7 +14,7 @@
 <label class="check report-regular-filter"><input type="checkbox" name="regular" value="1" {% if report_regular_only %}checked{% endif %}>Nur reguläre Berichte</label>
 <button class="secondary" type="submit">Filtern</button>
 </form>
-<p class="muted">Montags, 08:00 Uhr · Europe/Berlin</p>
+{% if report_plan %}<p class="muted">{{report_plan.schedule|schedule_label}} · Europe/Berlin · <a href="/smtp#berichtszeitplan">Berichtszeitplan bearbeiten</a></p>{% endif %}
 {% if reports %}
 <div class="card tablewrap report-table-wrap" role="region" aria-label="Archivierte Wochenberichte" tabindex="0">
 <table class="report-table">
