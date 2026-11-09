@@ -1,8 +1,10 @@
 """Test the project opt-in and the observed VDE controls in isolated Brave."""
 import os
+from pathlib import Path
+import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from playwright.async_api import async_playwright
 
@@ -55,10 +57,14 @@ body{font:20px sans-serif;margin:20px}button{padding:12px}.icon__menu{display:no
 
 @unittest.skipUnless(os.environ.get('KIWM_VDE_QA_BROWSER') == '1', 'Isolierter Brave-Browser erforderlich')
 class VdeFlowBrowser(unittest.IsolatedAsyncioTestCase):
-    async def exercise(self, mobile, *, already_open=False, selected=False):
+    def qa_cdp(self):
         cdp = os.environ['BROWSER_CDP_URL']
         if cdp != 'http://172.29.148.20:9223':
             raise RuntimeError('Nur das isolierte VDE-Testnetz ist zugelassen.')
+        return cdp
+
+    async def exercise(self, mobile, *, already_open=False, selected=False):
+        cdp = self.qa_cdp()
         async with async_playwright() as playwright:
             browser = await playwright.chromium.connect_over_cdp(cdp)
             context = browser.contexts[0]
@@ -91,3 +97,75 @@ class VdeFlowBrowser(unittest.IsolatedAsyncioTestCase):
 
     async def test_mobile_norms_already_selected(self):
         await self.exercise(True, selected=True)
+
+    async def test_standard_run_preserves_the_opted_in_vde_tab_and_session(self):
+        import engine
+        from relevance_test_model import review_only_model
+        import store
+
+        cdp = self.qa_cdp()
+        standard_url = 'https://monitor-fixture.example.test/archive'
+        standard_text = 'Ein eigenständiger Prüftext für das Standardprojekt.'
+        async with async_playwright() as playwright:
+            browser = await playwright.chromium.connect_over_cdp(cdp)
+            context = browser.contexts[0]
+            vde_page = await context.new_page()
+            stale_page = await context.new_page()
+            await vde_page.route(vde_norms.URL, lambda route: route.fulfill(content_type='text/html', body=PAGE))
+            await vde_page.goto(vde_norms.URL)
+            await vde_page.evaluate("sessionStorage.setItem('qa-session', 'retained')")
+
+            class FixtureContext:
+                def __getattr__(self, name):
+                    return getattr(context, name)
+
+                async def new_page(self):
+                    page = await context.new_page()
+                    await page.route(standard_url, lambda route: route.fulfill(
+                        content_type='text/html; charset=utf-8',
+                        body=f'<main><h1>Projektarchiv</h1><p>{standard_text}</p></main>'))
+                    return page
+
+            # Share the isolated CDP connection so interception stays attached.
+            proxy = SimpleNamespace(contexts=[FixtureContext()], close=AsyncMock())
+
+            class ConnectedPlaywright:
+                async def __aenter__(self):
+                    return SimpleNamespace(chromium=SimpleNamespace(connect_over_cdp=AsyncMock(return_value=proxy)))
+
+                async def __aexit__(self, *_):
+                    pass
+
+            async def agent(task, initial, *_args, **_kwargs):
+                self.assertEqual(initial['url'], standard_url)
+                self.assertIn(standard_text, initial['text'])
+                return {'complete': True, 'pending': [], 'checked': ['Projektarchiv'], 'actions': []}
+
+            try:
+                with tempfile.TemporaryDirectory(dir='/data') as tmp:
+                    folder = Path(tmp)
+                    with (patch.multiple(store, DATA=folder, CONFIG=folder/'settings.json', SECRETS=folder/'credentials.json'),
+                          patch.multiple(engine, DATA=folder, BROWSER_CDP_URL=cdp, async_playwright=ConnectedPlaywright,
+                                         run_agent=agent, create_summary=AsyncMock(return_value='QA erfolgreich'),
+                                         analyze_visual_changes=AsyncMock(return_value=[]), llm=AsyncMock(side_effect=review_only_model))):
+                        store.init()
+                        store.save_json(store.CONFIG, {key: 'synthetic-no-model' for key in ('agent_model', 'analysis_model', 'vision_model')})
+                        for pid, url, host in (('vde', vde_norms.URL, 'www.normenbibliothek.de'),
+                                               ('standard', standard_url, 'monitor-fixture.example.test')):
+                            store.execute('INSERT INTO projects(id,name,url,prompt,domains,cron,enabled,next_due,created) VALUES(?,?,?,?,?,?,?,?,?)',
+                                          (pid, pid, url, 'Projektarchiv lesen.', host, '0 6 * * *', 0, store.now(), store.now()))
+                        browser_mode.save(store.one("SELECT * FROM projects WHERE id='vde'"),
+                                          {'mode': 'visual', 'entry_url': '', 'flow': 'vde_norms'})
+                        store.execute('INSERT INTO runs(id,project_id,started,status,origin) VALUES(?,?,?,?,?)',
+                                      ('standard-run', 'standard', store.now(), 'running', 'test'))
+                        await engine.monitor(store.one("SELECT * FROM projects WHERE id='standard'"), 'standard-run')
+                        run = store.one("SELECT status,error FROM runs WHERE id='standard-run'")
+                        self.assertEqual(run['status'], 'success', run['error'])
+                        self.assertEqual(store.rows("SELECT DISTINCT url FROM snapshots WHERE run_id='standard-run'"),
+                                         [{'url': standard_url}])
+                    self.assertTrue(stale_page.is_closed())
+                    self.assertFalse(vde_page.is_closed())
+                    self.assertEqual(await vde_page.evaluate("sessionStorage.getItem('qa-session')"), 'retained')
+            finally:
+                await vde_page.close()
+                await browser.close()
