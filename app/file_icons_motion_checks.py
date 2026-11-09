@@ -101,7 +101,7 @@ class FileIconsMotionBrowser(unittest.IsolatedAsyncioTestCase):
         await self.open('/files?q=prüfprotokoll')
         self.assertEqual(await self.page.locator('[data-file-row]').count(),1)
         self.assertEqual(await self.page.locator('.file-document-name').inner_text(),'Prüfprotokoll Technische Anlagen')
-        self.assertEqual(await self.page.locator('[data-files-table] thead th').count(),7)
+        self.assertEqual(await self.page.locator('[data-files-table] thead th').count(),8)
         await self.page.locator('[data-files-sort-key=document_name]').click()
         await self.page.wait_for_function("document.querySelector('th.files-document-name-column').getAttribute('aria-sort') === 'ascending'")
         self.assertEqual(await self.page.locator('[data-files-query]').input_value(),'prüfprotokoll')

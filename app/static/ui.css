@@ -223,6 +223,7 @@ html[data-motion=off] .notice-button{animation:none}
 .files-table .files-type-column{width:max(52px,6rem);padding-inline:6px;text-align:center;vertical-align:middle}
 .files-table .files-type-column [data-files-sort]{justify-content:center}
 .files-table .files-name-column{width:22%}
+.files-table .files-size-column{width:6rem;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .files-table .files-date-column{width:9.5rem}
 .files-table .files-download-column{width:max(52px,5.75rem);padding-inline:6px;text-align:center;vertical-align:middle}
 .file-document-name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;line-height:1.5;font-weight:500}

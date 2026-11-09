@@ -37,7 +37,7 @@ MAX_ZIP_BYTES = 2 * 1024**3
 MAX_ZIP_FILES = 5000
 CHUNK_SIZE = 128 * 1024
 MAX_QUERY = 512
-SORTS = {'tags', 'project', 'type', 'name', 'document_name', 'changed_at'}
+SORTS = {'tags', 'project', 'type', 'name', 'document_name', 'size', 'changed_at'}
 _ID = re.compile(r'[A-Za-z0-9_-]{1,80}\Z')
 _HASH = re.compile(r'[a-f0-9]{64}\Z')
 _RESERVED = re.compile(r'(?i)(?:con|prn|aux|nul|conin\$|conout\$|clock\$|com[1-9]|lpt[1-9])(?:\..*)?\Z')
@@ -340,7 +340,7 @@ def list_files(query='', sort='changed_at', direction='desc'):
     key = {'tags':lambda row:_normal(' '.join(tag['name'] for tag in row['tags'])),
            'project':lambda row:_normal(row['project_name']), 'type':lambda row:row['file_type'],
            'name':lambda row:_normal(row['filename']), 'document_name':lambda row:_normal(row['document_name']),
-           'changed_at':lambda row:row['changed_at']}[sort]
+           'size':lambda row:row['size'], 'changed_at':lambda row:row['changed_at']}[sort]
     selected.sort(key=lambda row:(_normal(row['filename']),_normal(row['project_name']),row['sha256']))
     selected.sort(key=key, reverse=direction=='desc')
     unique = {row['sha256']:row['size'] for row in rows}

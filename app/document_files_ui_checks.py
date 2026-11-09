@@ -138,9 +138,9 @@ class GlobalFilesUI(unittest.TestCase):
         self.assertEqual(self.client.get(favicon['src']).headers['content-type'], 'image/svg+xml')
         self.assertIsNotNone(table.select_one('.files-project-column a[href="/projects/beta"] .favicon-placeholder'))
         headers = table.select('thead th')
-        self.assertEqual(len(headers), 7)
+        self.assertEqual(len(headers), 8)
         text = ' '.join(header.get_text(' ', strip=True) for header in headers)
-        for label in ('Tags', 'Projekt', 'Dateityp', 'Dokumentname', 'Dateiname', 'Zuletzt geändert', 'Download'):
+        for label in ('Tags', 'Projekt', 'Dateityp', 'Dokumentname', 'Dateiname', 'Größe', 'Zuletzt geändert', 'Download'):
             self.assertIn(label, text)
         type_cell = table.select_one('td.files-type-column')
         self.assertIsNotNone(type_cell.select_one('[role=img][aria-label]'))
@@ -148,7 +148,7 @@ class GlobalFilesUI(unittest.TestCase):
         self.assertEqual(len(table.select('thead th[aria-sort="descending"]')), 1)
         sort_keys = {parse_qs(urlsplit(link['href']).query)['sort'][0]
                      for link in table.select('thead a[data-files-sort]')}
-        self.assertEqual(sort_keys, {'tags', 'project', 'type', 'document_name', 'name', 'changed_at'})
+        self.assertEqual(sort_keys, {'tags', 'project', 'type', 'document_name', 'name', 'size', 'changed_at'})
         form = page.select_one('form[data-files-search]')
         self.assertEqual(form.get('method', '').lower(), 'get')
         self.assertEqual(form.get('action'), '/files')
@@ -198,6 +198,21 @@ class GlobalFilesUI(unittest.TestCase):
         desc = [self.row_source(row)['project_id'] for row in self.file_rows(self.page(sort='project', direction='desc'))]
         self.assertEqual(asc, ['alpha', 'alpha', 'alpha', 'beta'])
         self.assertEqual(desc, ['beta', 'alpha', 'alpha', 'alpha'])
+
+    def test_20_size_shows_original_bytes_in_mb_and_sorts_numerically(self):
+        for name, size in (('mittel', 1_250_000), ('gross', 12_500_000)):
+            self.document('alpha', f'https://example.org/{name}.csv', b'x' * size, 8, extension='csv')
+        for direction, expected in (('asc', ['<0,01 MB', '1,25 MB', '12,50 MB']),
+                                    ('desc', ['12,50 MB', '1,25 MB', '<0,01 MB'])):
+            with self.subTest(direction=direction):
+                page = self.page(q='csv', sort='size', direction=direction)
+                cells = [row.select_one('.files-size-column').get_text(strip=True) for row in self.file_rows(page)]
+                self.assertEqual(cells, expected)
+                header = page.select_one('th.files-size-column')
+                self.assertEqual(header['aria-sort'], 'ascending' if direction == 'asc' else 'descending')
+                link = parse_qs(urlsplit(header.a['href']).query)
+                self.assertEqual(link, {'q': ['csv'], 'sort': ['size'],
+                                        'direction': ['desc' if direction == 'asc' else 'asc']})
 
     def test_06_expired_missing_and_unsafe_originals_are_not_listed_or_downloaded(self):
         secret = store.SECRETS.read_bytes()

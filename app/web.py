@@ -154,6 +154,13 @@ def storage_size(value):
         size /= 1024
 
 env.filters['storage_size'] = storage_size
+
+def file_size_mb(size):
+    if 0 < size < 10_000:
+        return '<0,01 MB'
+    return f'{size / 1_000_000:.2f} MB'.replace('.', ',')
+
+env.filters['file_size_mb'] = file_size_mb
 env.filters['schedule_label'] = scheduling.label
 NOTICES = {
     'distribution_saved':'Verteiler gespeichert',
@@ -944,7 +951,7 @@ async def global_files(request: Request, q: str = '', sort: str = 'changed_at', 
     except (ValueError, TypeError):
         raise HTTPException(400, 'Ungültige Suche oder Sortierung.') from None
     links = {}
-    for key in ('tags', 'project', 'type', 'document_name', 'name', 'changed_at'):
+    for key in ('tags', 'project', 'type', 'document_name', 'name', 'size', 'changed_at'):
         target_direction = ('asc' if catalog['direction'] == 'desc' else 'desc') if key == catalog['sort'] else ('desc' if key == 'changed_at' else 'asc')
         links[key] = '/files?' + urlencode({'q': q, 'sort': key, 'direction': target_direction})
     links['icon'] = links['type']
