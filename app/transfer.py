@@ -24,6 +24,7 @@ import retention
 import retry_jobs
 import site_safety
 import browser_mode
+import navigation_macros
 import distributions
 from functools import wraps
 from project_meta import normalize_color, normalize_tags
@@ -185,6 +186,7 @@ def export_to(destination, history=False, include_secrets=False):
                    'distributions':[dict(r) for r in c.execute('SELECT * FROM distributions'+('' if history else ' WHERE deleted_at IS NULL'))],
                    'crawl_profiles':{p['id']:site_safety.profile(p['id'],c) for p in projects},
                    'browser_modes':{p['id']:browser_mode.get(p,c) for p in projects},
+                   'navigation_macros':{p['id']:navigation_macros.get(p,c) for p in projects},
                    'collection_indexes':[dict(r) for r in c.execute("SELECT * FROM state WHERE key LIKE 'collection_index:%'")] if history else [],
                    'history':history_rows,
                    'content_scopes':[dict(r) for r in c.execute("SELECT * FROM state WHERE key LIKE 'content_scopes:%'")] if history else [],'files':{}}
@@ -310,11 +312,17 @@ def validate(payload):
             except (ValueError,TypeError):raise Invalid('Ungültiger Prüfzeitplan.') from None
     profiles=payload.get('crawl_profiles',{})
     modes=payload.get('browser_modes',{})
+    macros=payload.get('navigation_macros',{})
     require(isinstance(modes,dict) and set(modes)<=seen,'Ungültige Browserbedienung.')
+    require(isinstance(macros,dict) and set(macros)<=seen,'Ungültige Projektmakros.')
     for p in projects:
         if p['id'] in modes:
             try:browser_mode.validate(modes[p['id']],p)
             except (ValueError,TypeError,KeyError):raise Invalid('Ungültige Browserbedienung oder Startadresse.') from None
+        if p['id'] in macros:
+            start=modes.get(p['id'],{}).get('entry_url') or p['url']
+            try:navigation_macros.validate(macros[p['id']],start)
+            except (ValueError,TypeError,KeyError):raise Invalid('Ungültiges Browser-Makro oder Startadresse.') from None
     require(isinstance(profiles,dict) and set(profiles)<=seen and
             all(isinstance(value,str) and value in site_safety.PROFILES for value in profiles.values()),'Ungültiges Prüftempo.')
     if payload['version']>=3:
@@ -563,6 +571,8 @@ def import_package(path,payload,apply_settings=True,apply_secrets=False,activate
             for p in payload['projects']:
                 if p['id'] in payload.get('browser_modes',{}):
                     browser_mode.save(p,payload['browser_modes'][p['id']],c)
+                if p['id'] in payload.get('navigation_macros',{}):
+                    navigation_macros.save(p,payload['navigation_macros'][p['id']],c)
             tag_registry.initialize(c)
             if payload['version']>=2:
                 # Version 2 is the complete public access configuration for the

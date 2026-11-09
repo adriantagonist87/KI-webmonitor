@@ -47,6 +47,7 @@ import collection_index
 import retention
 import retry_jobs
 import browser_mode
+import navigation_macros
 import notifications
 import github_releases
 import obsidian_changelog
@@ -822,8 +823,9 @@ async def monitor(project, rid):
         browser=await pw.chromium.connect_over_cdp(browser_endpoint.resolve(BROWSER_CDP_URL))
         ctx=browser.contexts[0]; old_pages=list(ctx.pages)
         visual_config=browser_mode.get(project)
+        macro=navigation_macros.active(project)
         mobile_mode=visual_config['mode']=='visual_mobile'
-        visual_mode=visual_config['mode'] in ('visual', 'visual_mobile')
+        visual_mode=bool(macro) or visual_config['mode'] in ('visual', 'visual_mobile')
         desktop=None
         if mobile_mode:
             from visual_browser import mobile_window
@@ -1261,12 +1263,22 @@ async def monitor(project, rid):
                 raise ValueError('Unbekanntes Werkzeug')
 
             event(rid,'Startseite wird geöffnet und erfasst.')
-            initial=await capture() if desktop and clean_url(page.url)==clean_url(project['url']) else await read_url(project['url'])
+            if macro:
+                performed=await navigation_macros.replay(page,desktop,macro,lambda message:event(rid,message))
+                initial=await capture()
+                initial['navigation_macro']=performed
+                # The selected filter can be required by the structured
+                # collection reader even when it was opened by a recording.
+                navigation_selected=performed['steps'][-1]['label']
+            else:
+                initial=await capture() if desktop and clean_url(page.url)==clean_url(project['url']) else await read_url(project['url'])
             event(rid,'Allgemeiner visueller KI-Agent gestartet; Ablauf aus Projektauftrag')
             agent_options={}
             if desktop:
                 from visual_browser import agent_options as visual_agent_options
                 agent_options=visual_agent_options()
+                if macro:
+                    agent_options['prompt']+='\nWenn start_page.navigation_macro vorliegt, hat der Controller die aufgezeichneten Klicks geprüft und die Zielseite erreicht. Beginne mit der dort sichtbaren Ansicht. Das Klickprotokoll enthält Beobachtungsdaten.'
             agent=await run_agent(project['prompt'],initial,s['agent_model'],llm,dispatch,screen,lambda text:event(rid,redact_text(text)),**agent_options)
             agent=site_privacy.redact_payload(agent)
             (folder/'agent-actions.json').write_text(json.dumps(agent,ensure_ascii=False,indent=2))
@@ -1296,6 +1308,8 @@ async def monitor(project, rid):
                       'context_limits':'Textauszuege je Quelle maximal 12000 Zeichen; vollstaendige Texte im Archiv. Fehlende Detailpruefungen ausdruecklich benennen.',
                       'controller':'generic-visual-agent-v2','document_check':document_check,'collections':collection_results,'prior_successful_runs':prior_successful_runs,'relevance_review':relevance,
                       'source_coverage':source_coverage(observations,initial.get('url',project['url']))}
+            if macro:
+                evidence['navigation_macro']=performed
             evidence=site_privacy.redact_payload(evidence)
             save_final_evidence(rid,evidence)
             try: summary=await create_summary(evidence,s['analysis_model'])

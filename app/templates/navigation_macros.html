@@ -1,0 +1,60 @@
+<div class="page-heading"><h1>Browser-Makros</h1><a class="button neutral" href="/projects/{{project.id}}">{{icon('back')}}Zum Projekt</a></div>
+<section class="card">
+  <h2>{{project.name}}</h2>
+  {% if macro_error %}<p role="alert">{{macro_error}}</p>{% endif %}
+  {% if not macro_supported %}
+  <p>Dieses Projekt verwendet einen direkten Datenabruf.</p>
+  {% elif recording %}
+  <p role="status">Aufnahme läuft. {{recording.steps|length}} Klicks beim letzten Laden erfasst. Die Aufnahme endet nach zehn Minuten.</p>
+  <p>Bediene die Website im vorbereiteten Brave-Fenster. Wechsle zurück, sobald die Zielansicht sichtbar ist.</p>
+  <div class="form-footer">
+    <a class="button secondary" target="_blank" rel="noopener" href="{{browser_ui_url}}">{{icon('external')}}Brave öffnen</a>
+    <form class="inline" method="post"><input type="hidden" name="csrf" value="{{csrf}}"><button name="action" value="stop">Ziel erreicht und Aufnahme beenden</button> <button class="neutral" name="action" value="cancel">Verwerfen</button></form>
+  </div>
+  {% elif macro_draft %}
+  <h3>Aufnahme prüfen</h3>
+  <p>Zielseite <code>{{macro_draft.target}}</code></p>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="draft" value="{{macro_draft.id}}">
+    <div class="field-group"><label for="macro-name">Name</label><input id="macro-name" name="name" maxlength="80" required placeholder="Zum Beispiel Normen auf Mobil öffnen"></div>
+    <ol class="step-list">
+      {% for step in macro_draft.steps %}
+      <li><strong>{{step.label or 'Menüsymbol'}}</strong>
+        {% if step.label|lower in ['schließen','schliessen','verstanden','ok','close','x','×','✖'] %}
+        <label class="check-label"><input type="checkbox" name="optional" value="{{loop.index0}}">Überspringen, wenn der Hinweis fehlt</label>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    <div class="form-footer"><button name="action" value="save">Speichern und für dieses Projekt verwenden</button><button class="neutral" formnovalidate name="action" value="discard">Verwerfen</button></div>
+  </form>
+  {% else %}
+  <p>Öffne die Aufnahme und klicke dich in Brave bis zur Zielansicht durch. Melde dich bei geschützten Quellen vorher über den Brave-Browser an. Die Aufnahme erfasst sichtbare Navigationsklicks und die Zieladresse.</p>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <button name="action" value="start" {% if busy or manual %}disabled{% endif %}>{{icon('play')}}Aufnahme starten</button>
+    {% if busy or manual %}<p class="field-help">Laufende Prüfung oder manuellen Browsermodus zuerst beenden.</p>{% endif %}
+  </form>
+  {% endif %}
+</section>
+{% if macro_supported and macro_state.macros %}
+<section class="card">
+  <h2>Gespeicherte Makros</h2>
+  <p>Die nächste Prüfung spielt das ausgewählte Makro in Brave ab und übergibt die erreichte Seite und das Klickprotokoll an die KI.</p>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <div class="field-group"><label for="active-macro">Makro für Prüfungen</label>
+      <select id="active-macro" name="macro"><option value="">Kein Makro</option>{% for macro in macro_state.macros %}<option value="{{macro.id}}" {% if macro.id == macro_state.active %}selected{% endif %}>{{macro.name}}</option>{% endfor %}</select>
+    </div>
+    <div class="form-footer"><button name="action" value="select">Auswahl speichern</button></div>
+  </form>
+  {% for macro in macro_state.macros %}
+  <details><summary>{{macro.name}} · {{macro.steps|length}} Schritte</summary><div class="details-body">
+    <p>Zielseite <code>{{macro.target}}</code></p>
+    <ol class="step-list">{% for step in macro.steps %}<li>{{step.label or 'Menüsymbol'}}{% if step.optional %} · optional{% endif %}</li>{% endfor %}</ol>
+    <form method="post"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="macro" value="{{macro.id}}"><button class="neutral" name="action" value="delete">{{icon('trash')}}Makro entfernen</button></form>
+  </div></details>
+  {% endfor %}
+</section>
+{% endif %}

@@ -5,6 +5,8 @@ import math
 import secrets
 import os
 import browser_mode
+import navigation_macros
+from navigation_recording import Recorder
 import shutil
 import tempfile
 from contextlib import asynccontextmanager
@@ -52,6 +54,8 @@ import retry_jobs
 from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+macro_recorder = Recorder()
+
 @asynccontextmanager
 async def lifespan(app):
     init()
@@ -64,6 +68,7 @@ async def lifespan(app):
         for worker in (task, delivery, names):
             worker.cancel()
         await asyncio.gather(task, delivery, names, return_exceptions=True)
+        await macro_recorder.shutdown(engine.BUSY)
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 app.mount('/static', StaticFiles(directory=Path(__file__).parent / 'static'), name='static')
@@ -328,7 +333,7 @@ def breadcrumb_path(page, ctx):
     }
     if page in sections:
         return path + [sections[page]]
-    if page in ('project', 'edit', 'site_access'):
+    if page in ('project', 'edit', 'site_access', 'macros'):
         project_context = ctx.get('project') or {}
         if not project_context.get('id'):
             return path + [('/projects/new', 'Neues Projekt')]
@@ -338,6 +343,8 @@ def breadcrumb_path(page, ctx):
             path.append((url + '/edit', 'Bearbeiten'))
         if page == 'site_access':
             path.append((url + '/access', 'Webseitenzugang'))
+        if page == 'macros':
+            path.append((url + '/macros', 'Browser-Makros'))
     elif page == 'run':
         run = ctx['run']
         started = run.get('started')
@@ -377,6 +384,7 @@ def render(request, page, **ctx):
         'project': alias,
         'edit': alias + ' – Bearbeiten' if project_context.get('id') else 'Neues Projekt',
         'site_access': alias + ' – Webseitenzugang' if alias else 'Webseitenzugang',
+        'macros': alias + ' – Browser-Makros',
         'run': (ctx.get('run') or {}).get('name', '') + ' – Prüfung',
     }
     ctx.setdefault('page_title', titles.get(page))
@@ -961,7 +969,72 @@ async def download_stored_file(sid: str):
 
 @app.get('/browser')
 async def browser_help(request: Request):
-    return render(request, 'browser')
+    return render(request, 'browser', macro_projects=rows('SELECT id,name FROM projects ORDER BY name'))
+
+
+@app.get('/browser/macros')
+async def browser_macro_project(pid: str):
+    return redirect(detail_path(project(pid)['id']) + '/macros')
+
+
+def macro_page(request, p, error=''):
+    recording = macro_recorder.active
+    return render(request, 'macros', project=p, macro_error=error,
+                  macro_state=navigation_macros.get(p), macro_draft=macro_recorder.draft_for(p['id']),
+                  recording=recording if recording and recording.project['id'] == p['id'] else None,
+                  macro_supported=not (github_repository(p['url']) or engine.dke_standards.matches(p['url'])
+                                       or engine.obsidian_changelog.matches(p['url'])))
+
+
+@app.get('/projects/{pid}/macros')
+async def project_macros(pid: str, request: Request):
+    return macro_page(request, project(pid))
+
+
+@app.post('/projects/{pid}/macros')
+async def change_project_macros(pid: str, request: Request):
+    p = project(pid)
+    form = await request.form()
+    action = form.get('action')
+    try:
+        if action == 'start':
+            if github_repository(p['url']) or engine.dke_standards.matches(p['url']) or engine.obsidian_changelog.matches(p['url']):
+                raise ValueError('Diese Quelle verwendet einen direkten Datenabruf.')
+            await macro_recorder.start(p, engine.BROWSER_CDP_URL, engine.BUSY)
+        elif action in ('stop', 'cancel'):
+            await macro_recorder.stop(pid, engine.BUSY, keep=action == 'stop')
+        elif action == 'discard':
+            draft = macro_recorder.draft_for(pid)
+            if draft and form.get('draft') == draft['id']:
+                macro_recorder.draft = None
+        else:
+            value = navigation_macros.get(p)
+            if action == 'save':
+                draft = macro_recorder.draft_for(pid)
+                if not draft or form.get('draft') != draft['id']:
+                    raise ValueError('Die Aufnahme ist nicht mehr verfügbar.')
+                optional = set(form.getlist('optional'))
+                steps = [{**item, 'optional': str(index) in optional}
+                         for index, item in enumerate(draft['steps'])]
+                value['macros'].append({**draft, 'name': str(form.get('name', '')), 'steps': steps})
+                value['active'] = draft['id']
+            elif action == 'select':
+                value['active'] = str(form.get('macro', ''))
+            elif action == 'delete':
+                ident = form.get('macro')
+                value['macros'] = [macro for macro in value['macros'] if macro['id'] != ident]
+                if value['active'] == ident:
+                    value['active'] = ''
+            else:
+                raise ValueError('Unbekannte Makro-Aktion.')
+            navigation_macros.save(p, value)
+            if action == 'save':
+                macro_recorder.draft = None
+    except (ValueError, site_safety.ProtectionDetected) as error:
+        return macro_page(request, p, str(error))
+    except Exception:
+        return macro_page(request, p, 'Brave konnte die Aufnahme nicht öffnen oder abschließen.')
+    return redirect(detail_path(pid) + '/macros')
 
 @app.post('/manual')
 async def manual_mode(request: Request):

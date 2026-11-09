@@ -35,6 +35,7 @@ def remove(pid):
         c.execute('DELETE FROM state WHERE key IN (?,?)', ('project_icon:'+pid,'project_icon_attempt:'+pid))
         c.execute('DELETE FROM state WHERE key=?',('crawl_pace:'+pid,))
         c.execute('DELETE FROM state WHERE key=?',('browser_mode:'+pid,))
+        c.execute('DELETE FROM state WHERE key=?',('navigation_macros:'+pid,))
         index_prefix='collection_index:'+pid+':'
         c.execute('DELETE FROM state WHERE substr(key,1,?)=?', (len(index_prefix),index_prefix))
         c.execute('DELETE FROM projects WHERE id=?', (pid,))

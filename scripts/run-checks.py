@@ -38,7 +38,7 @@ SUITES = {
     'site_safety_browser_checks': 7,
     'retention_checks': 23, 'document_inventory_checks': 24,
     'retention_integration_checks': 9, 'history_cleanup_checks': 8, 'document_files_checks': 22,
-    'ui_checks': 17, 'transfer_checks': 24, 'agent_driver_checks': 14,
+    'ui_checks': 17, 'transfer_checks': 24, 'agent_driver_checks': 14, 'navigation_macro_checks': 4,
     'configured_sources_checks': 9, 'document_metadata_checks': 25,
     # Current runtime checks replace the removed OCR/transcription suites.
     'configuration_checks': 15, 'configuration_ui_checks': 7, 'document_hash_checks': 18, 'document_types_checks': 8, 'document_checkpoint_checks': 5, 'selftest': 22, 'boundary_checks': 3, 'enhancement_checks': 24,

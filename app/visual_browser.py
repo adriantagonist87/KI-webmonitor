@@ -145,15 +145,17 @@ class Desktop:
             raise RuntimeError('Die Adresse wurde nicht im sichtbaren Browser geöffnet.') from None
         await self.wait_ready()
 
-    async def click(self, x, y, label):
-        if not isinstance(label, str) or not label.strip() or len(label) > 160:
+    async def click(self, x, y, label, *, macro_anchor=''):
+        if not isinstance(label, str) or (not label.strip() and not macro_anchor) or len(label) > 160:
             raise ValueError('Sichtbare Beschriftung erforderlich.')
         await site_safety.check_page(self.page)
         await site_safety.wait()
         desktop = await self.coordinates(x, y)
-        info = await self.page.evaluate('''({x,y,nav})=>{const e=document.elementFromPoint(x,y)?.closest('a,button,[role=button],[role=tab],summary');if(!e)return null;return {label:(e.getAttribute('aria-label')||e.innerText||e.title||'').trim(),href:e.href||'',form:!!e.form||!!e.closest('form'),disabled:!!e.disabled||e.getAttribute('aria-disabled')==='true',target:e.target||'',cookie:!!e.closest('[id*=cookie],[class*=cookie],[id*=consent],[class*=consent]'),tag:e.tagName,expanded:e.hasAttribute('aria-expanded'),role:e.getAttribute('role'),nav:!!e.closest(nav),type:e.type||''}}''', {'x':x, 'y':y,'nav':NAVIGATION_CONTAINERS})
+        info = await self.page.evaluate('''({x,y,nav})=>{const e=document.elementFromPoint(x,y)?.closest('a,button,[role=button],[role=tab],summary');if(!e)return null;return {label:(e.getAttribute('aria-label')||e.innerText||e.title||'').trim(),href:e.href||'',form:!!e.form||!!e.closest('form'),disabled:!!e.disabled||e.getAttribute('aria-disabled')==='true',target:e.target||'',cookie:!!e.closest('[id*=cookie],[class*=cookie],[id*=consent],[class*=consent]'),tag:e.tagName,expanded:e.hasAttribute('aria-expanded'),role:e.getAttribute('role'),nav:!!e.closest(nav),type:e.type||'',anchors:[e.id,e.getAttribute('aria-controls')]}}''', {'x':x, 'y':y,'nav':NAVIGATION_CONTAINERS})
         normalize = lambda v: ' '.join(v.casefold().split())
-        if not info or normalize(info['label']) != normalize(label) or info['form'] or info['disabled'] or info['target'] not in ('','_self') or _DANGER.search(info['label']):
+        matches = info and (normalize(info['label']) == normalize(label) if label
+                            else not info['label'] and macro_anchor in info['anchors'])
+        if not matches or info['form'] or info['disabled'] or info['target'] not in ('','_self') or _DANGER.search(info['label']):
             raise ValueError('Bildziel stimmt nicht mit einer erlaubten sichtbaren Schaltfläche überein.')
         if re.search(r'(?i)akzeptier|zustimm|ablehn|notwendige',info['label']) and not info['cookie']:
             raise ValueError('Zustimmung ist nur in einem bestätigten Cookiehinweis möglich.')
