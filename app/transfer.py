@@ -8,7 +8,7 @@ import sqlite3
 import stat
 import tempfile
 import zipfile
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
@@ -27,13 +27,15 @@ import site_safety
 import browser_mode
 import navigation_macros
 import distributions
+import transfer_credentials
 from functools import wraps
 from project_meta import normalize_color, normalize_tags
 
 FORMAT = 'ki-webmonitor'
 CONFIG_VERSION = 8
 VERSION = 9
-SUPPORTED_VERSIONS = range(1, VERSION + 1)
+PROTECTED_VERSION = 10
+SUPPORTED_VERSIONS = range(1, PROTECTED_VERSION + 1)
 MAX_UPLOAD = 512 * 1024**2
 MAX_JSON = 64 * 1024**2
 MAX_EXPANDED = 2 * 1024**3
@@ -134,7 +136,7 @@ def validate_retries(records, runs, projects):
                 'Wiederholungsstatus und Prüfungszuordnung widersprechen sich.')
 
 def validate_site_auth(payload):
-    """Only public, origin-bound access metadata is portable. Never read a vault."""
+    """Validate the public origin-bound metadata independently of the vault."""
     if payload['version']==1:
         require('site_auth' not in payload,'Formatversion 1 darf keine Website-Zugänge enthalten.')
         return
@@ -161,8 +163,11 @@ def storage_guard(exclusive):
 
 
 @storage_guard(exclusive=False)
-def export_to(destination, history=False, include_secrets=False):
-    with store.db() as c:
+def export_to(destination, history=False, include_secrets=False, *, passphrase=None):
+    protected = passphrase is not None
+    require(not (protected and include_secrets), 'Verschlüsselte und unverschlüsselte Zugangsdaten können nicht kombiniert werden.')
+    vault = site_access.transfer_vault() if protected else nullcontext(({}, None))
+    with vault as (logins, _), store.db() as c:
         tag_registry.initialize(c)
         c.commit()
         c.execute('BEGIN')
@@ -179,7 +184,8 @@ def export_to(destination, history=False, include_secrets=False):
             columns=[r[1] for r in c.execute('PRAGMA table_info(snapshots)')]
             projection=', '.join("CASE WHEN text='' THEN '' END AS text" if column=='text' else column for column in columns)
             history_rows['snapshots']=[dict(r) for r in c.execute('SELECT '+projection+' FROM snapshots')]
-        payload = {'format':FORMAT,'version':VERSION if history else CONFIG_VERSION,'created_at':store.now(),'kind':'archive' if history else 'configuration',
+        version = PROTECTED_VERSION if protected else VERSION if history else CONFIG_VERSION
+        payload = {'format':FORMAT,'version':version,'created_at':store.now(),'kind':'archive' if history else 'configuration',
                    'projects':[{k:r[k] for k in PROJECT_KEYS} for r in projects], 'settings':store.persisted_settings(),
                    'credentials':{k:v for k,v in store.persisted_credentials().items() if k in SECRET_KEYS} if include_secrets else None,
                    'tag_registry':[{k:r[k] for k in ('id','name','key','color')} for r in c.execute('SELECT * FROM tags ORDER BY key')],
@@ -193,6 +199,12 @@ def export_to(destination, history=False, include_secrets=False):
                    'history':history_rows,
                    'content_scopes':[dict(r) for r in c.execute("SELECT * FROM state WHERE key LIKE 'content_scopes:%'")] if history else [],'files':{}}
         validate_site_auth(payload)
+        if protected:
+            selected = {pid: logins[pid] for pid in payload['site_auth'] if pid in logins}
+            site_access.validate_transfer_logins(selected, payload['site_auth'])
+            app_credentials = {key: value for key, value in store.persisted_credentials().items() if key in SECRET_KEYS}
+            validate_app_credentials(app_credentials)
+            payload['protected_credentials'] = transfer_credentials.seal(payload, {'app': app_credentials, 'sites': selected}, passphrase)
         if history:
             return write_archive(c,destination,payload)
     if not history:
@@ -264,6 +276,15 @@ def validate_settings(value):
     try:
         configuration.resolve_settings(value,environ={})
         communication_config.resolve(value,communication_config.FIELDS,environ={})
+    except configuration.ConfigurationError as error:raise Invalid(str(error)) from None
+
+
+def validate_app_credentials(credentials):
+    require(isinstance(credentials,dict) and not set(credentials)-SECRET_KEYS and
+            all(isinstance(v,str) and len(v)<=8000 and '\x00' not in v for v in credentials.values()),'Ungültige Zugangsdatenfelder.')
+    try:
+        configuration.resolve_credentials(credentials,environ={})
+        communication_config.resolve(credentials,communication_config.SECRETS,environ={})
     except configuration.ConfigurationError as error:raise Invalid(str(error)) from None
 
 def validate_distributions(payload):
@@ -360,12 +381,14 @@ def validate(payload):
         try:collection_index.plan_update(json.loads(item['value']),[],False)
         except (ValueError,TypeError):raise Invalid('Ungültiger Sammlungsinhalt.') from None
     creds=payload.get('credentials')
-    require(creds is None or isinstance(creds,dict) and not set(creds)-SECRET_KEYS and all(isinstance(v,str) and len(v)<=8000 and '\x00' not in v for v in creds.values()),'Ungültige Zugangsdatenfelder.')
-    if creds is not None:
-        try:
-            configuration.resolve_credentials(creds,environ={})
-            communication_config.resolve(creds,communication_config.SECRETS,environ={})
-        except configuration.ConfigurationError as error:raise Invalid(str(error)) from None
+    if payload['version']==PROTECTED_VERSION:
+        require(creds is None and 'protected_credentials' in payload,'Der verschlüsselte Zugangsdatenblock fehlt oder enthält Klartextfelder.')
+        require(isinstance(payload.get('created_at'),str) and len(payload['created_at'])<=80,'Ungültiges Erstellungsdatum.')
+        try:transfer_credentials.validate(payload['protected_credentials'])
+        except transfer_credentials.CredentialError as error:raise Invalid(str(error)) from None
+    else:
+        require('protected_credentials' not in payload,'Verschlüsselte Zugangsdaten erfordern das aktuelle Exportformat.')
+        if creds is not None:validate_app_credentials(creds)
     manifest=payload.get('files')
     require(isinstance(manifest,dict) and len(manifest)<=MAX_FILES,'Ungültiges Dateiverzeichnis.')
     for relative,entry in manifest.items():
@@ -485,7 +508,8 @@ def preview(payload):
     return {'kind':payload['kind'],'projects':[{'id':p['id'],'name':p['name'],'existing':p['id'] in existing,'enabled':bool(p['enabled'])} for p in payload['projects']],
             'new':sum(p['id'] not in existing for p in payload['projects']),'updated':sum(p['id'] in existing for p in payload['projects']),
             'counts':{t:len(h.get(t,[])) for t in ('runs','snapshots','changes','reports')},'files':len(payload['files']),
-            'settings':len(payload['settings']),'credentials':bool(payload.get('credentials')),'site_auth':len(payload.get('site_auth',{})), 'tags':len(payload.get('tag_registry',[])), 'distributions':len(payload.get('distributions',[])),
+            'settings':len(payload['settings']),'credentials':bool(payload.get('credentials')),'protected_credentials': 'protected_credentials' in payload,
+            'site_auth':len(payload.get('site_auth',{})), 'tags':len(payload.get('tag_registry',[])), 'distributions':len(payload.get('distributions',[])),
             'retry_plans_cancelled':len(cancelled)}
 
 def preflight(c,payload):
@@ -523,17 +547,29 @@ def preflight(c,payload):
         require(not target.exists() or target.is_file() and file_hash(target)==entry['sha256'],'Abweichende vorhandene Archivdatei: '+relative)
 
 @storage_guard(exclusive=True)
-def import_package(path,payload,apply_settings=True,apply_secrets=False,activate=False):
+def import_package(path,payload,apply_settings=True,apply_secrets=False,activate=False,*,apply_site_logins=False,passphrase=None):
     """One DB transaction; files/settings roll back on failure, recovery copy retained."""
     validate(payload)
     require(not store.one("SELECT id FROM runs WHERE status IN ('running','queued')"),'Erst laufende oder wartende Prüfungen beenden lassen.')
+    app_credentials = payload.get('credentials') if apply_secrets else None
+    site_logins = {}
+    if 'protected_credentials' in payload and (apply_secrets or apply_site_logins):
+        restored = transfer_credentials.unseal(payload, passphrase)
+        require(isinstance(restored,dict) and set(restored)=={'app','sites'},'Ungültige geschützte Zugangsdaten.')
+        validate_app_credentials(restored['app'])
+        site_access.validate_transfer_logins(restored['sites'], payload['site_auth'])
+        app_credentials = restored['app'] if apply_secrets else None
+        site_logins = restored['sites'] if apply_site_logins else {}
+    elif apply_site_logins:
+        raise Invalid('Dieses Exportpaket enthält keinen geschützten Zugangsdatenblock.')
     required=sum(e['size'] for e in payload['files'].values())
     require(shutil.disk_usage(store.DATA).free>required+128*1024**2,'Nicht genug freier Speicher für Import und Sicherung.')
     recovery=store.DATA/'import-backups'/store.uid();recovery.mkdir(parents=True,mode=0o700)
     old_settings=store.CONFIG.read_bytes() if store.CONFIG.exists() else None
     old_secrets=store.SECRETS.read_bytes() if store.SECRETS.exists() else None
     created=[];config_written=False;secrets_written=False
-    with store.db() as c, ExitStack() as archives:
+    vault = site_access.transfer_vault() if site_logins else nullcontext(({}, None))
+    with vault as (_, merge_logins), store.db() as c, ExitStack() as archives:
         c.execute('BEGIN IMMEDIATE')
         try:
             preflight(c,payload)
@@ -582,7 +618,7 @@ def import_package(path,payload,apply_settings=True,apply_secrets=False,activate
             if payload['version']>=2:
                 # Version 2 is the complete public access configuration for the
                 # imported projects. Legacy files leave existing bindings intact.
-                # Website secrets are neither read nor changed by this import.
+                # Private values are restored separately, after validation.
                 for p in payload['projects']:
                     key='site_auth:'+p['id']
                     profile=payload['site_auth'].get(p['id'])
@@ -643,10 +679,12 @@ def import_package(path,payload,apply_settings=True,apply_secrets=False,activate
                 config_written=True;store.save_json(store.CONFIG,merged)
                 if 'global_schedule' in payload['settings']:
                     c.execute('UPDATE projects SET next_due=? WHERE use_global_schedule=1',(scheduling.next_for(merged['global_schedule']),))
-            if apply_secrets and payload.get('credentials') is not None:
-                merged=store.persisted_credentials();merged.update(payload['credentials'])
+            if app_credentials:
+                merged=store.persisted_credentials();merged.update(app_credentials)
                 secrets_written=True;store.save_json(store.SECRETS,merged)
             require(not c.execute('PRAGMA foreign_key_check').fetchone(),'Ungültige Datenbankverknüpfung.')
+            if merge_logins:
+                merge_logins(site_logins)
             c.commit()
         except Exception:
             c.rollback()
@@ -657,7 +695,8 @@ def import_package(path,payload,apply_settings=True,apply_secrets=False,activate
                     else:
                         tmp=target.with_suffix('.restore');tmp.write_bytes(old);os.chmod(tmp,0o600);tmp.replace(target)
             raise
-    return {'projects':len(payload['projects']),'added':added,'files':len(created),'recovery':str(recovery.relative_to(store.DATA))}
+    return {'projects':len(payload['projects']),'added':added,'files':len(created),'site_logins':len(site_logins),
+            'recovery':str(recovery.relative_to(store.DATA))}
 
 def workspace():
     root=store.DATA/'.transfers';root.mkdir(mode=0o700,exist_ok=True)

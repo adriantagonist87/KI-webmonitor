@@ -169,6 +169,42 @@ def _generic_value(value, limit):
     return isinstance(value,str) and 0<len(value)<=limit and not any(c in value for c in ('\x00','\r','\n'))
 
 
+def _matches_profile(record, profile):
+    return (_valid_record(record) and record['provider'] == profile['provider']
+            and record['origin'] == profile['origin'])
+
+
+def validate_transfer_logins(logins, profiles):
+    if not isinstance(logins, dict) or any(pid not in profiles or not _matches_profile(record, profiles[pid])
+                                           for pid, record in logins.items()):
+        raise AccessError('Die gespeicherten Zugangsdaten passen nicht zur Website-Zuordnung im Paket.')
+
+
+@contextmanager
+def transfer_vault():
+    """Hold the native vault lock through an export or the importing DB commit."""
+    with _LOCK:
+        path = vault_path()
+        previous = _read_vault()
+        existed = path.exists()
+        written = False
+
+        def merge(logins):
+            nonlocal written
+            store.save_json(path, {**previous, 'logins': {**previous['logins'], **logins}})
+            written = True
+
+        try:
+            yield previous['logins'], merge
+        except BaseException:
+            if written:
+                if existed:
+                    store.save_json(path, previous)
+                else:
+                    path.unlink(missing_ok=True)
+            raise
+
+
 def get_secret(pid):
     """Internal only. Caller must separately check public_config.enabled to log in.
 
@@ -180,7 +216,7 @@ def get_secret(pid):
         return None
     with _LOCK:
         record = _read_vault()['logins'].get(pid)
-        if not _valid_record(record) or record['provider']!=config['provider'] or record['origin']!=config['origin']:
+        if not _matches_profile(record, config):
             return None
         return dict(record)
 

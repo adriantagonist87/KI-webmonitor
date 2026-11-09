@@ -1,11 +1,12 @@
 """Isolated portable-export acceptance tests. Never writes production settings."""
 import os,tempfile,json,sqlite3,unittest,zipfile,io,copy
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
 scratch=tempfile.TemporaryDirectory(prefix='.transfer-check-',dir='/data')
 os.environ['DATA_DIR']=scratch.name
-import store,transfer,web,engine,configuration
+import store,transfer,web,engine,configuration,site_access,transfer_credentials
 from fixture import pdf
 from fastapi.testclient import TestClient
 from bs4 import BeautifulSoup
@@ -136,8 +137,13 @@ class TransferTests(unittest.TestCase):
   response=c.post('/transfer/export',data={'csrf':token,'kind':'configuration'})
   self.assertEqual(response.status_code,200);self.assertIn('attachment',response.headers['content-disposition'])
   self.assertIsNone(response.json()['credentials'])
-  response=c.post('/transfer/export',data={'csrf':token,'kind':'archive','include_secrets':'on'})
+  protected={'csrf':token,'kind':'archive','include_secrets':'on','export_passphrase':'Test-Export-Passphrase'}
+  self.assertEqual(c.post('/transfer/export',data=protected).status_code,400)
+  response=c.post('/transfer/export',data={**protected,'export_passphrase_repeat':protected['export_passphrase']})
   self.assertEqual(response.status_code,200);self.assertTrue(zipfile.is_zipfile(io.BytesIO(response.content)))
+  with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+   manifest=json.loads(z.read('webmonitor.json'))
+  self.assertIsNone(manifest['credentials']);self.assertIn('protected_credentials',manifest)
  def test_08_malformed_input_and_busy_import_do_not_modify_data(self):
   path,p=self.package(False);c,token=self.client()
   for value in (b'not json',b'{}',transfer.dump({**p,'version':transfer.VERSION+1}),transfer.dump({**p,'projects':[{'id':'bad'}]})):
@@ -389,5 +395,109 @@ class TransferTests(unittest.TestCase):
      with self.assertRaises(transfer.Invalid) as error:transfer.import_package(path,candidate)
     self.assertNotIn(value,str(error.exception))
     self.assertEqual((store.CONFIG.read_bytes(),store.SECRETS.read_bytes()),before)
+
+ def protected_package(self, history=False):
+  self.site_auth()
+  site_access.save('alpha',True,'834920187','93742')
+  store.execute('''INSERT OR IGNORE INTO projects(id,name,url,prompt,domains,cron,enabled,next_due,created)
+                   VALUES(?,?,?,?,?,?,?,?,?)''', ('beta','Website mit Formular','https://publisher.example.org/catalog',
+                     'Prüfen','publisher.example.org','0 6 * * *',1,store.next_due('0 6 * * *'),store.now()))
+  origin='https://publisher.example.org'
+  config={**site_access.GENERIC_DEFAULTS,'login_url':origin+'/login','submit_url':origin+'/signin'}
+  site_access.save_generic('beta',True,config,'SYNTHETIC-WEBSITE-USER','SYNTHETIC-WEBSITE-ä-PASS')
+  phrase='synthetische Exportphrase mit ö'
+  path=self.base/('protected.zip' if history else 'protected.json')
+  transfer.export_to(path,history,passphrase=phrase)
+  return path,transfer.read_package(path),phrase
+
+ def test_25_protected_json_and_zip_restore_project_and_app_logins(self):
+  for history in (False,True):
+   with self.subTest(history=history):
+    if history:self.select('source')
+    path,payload,phrase=self.protected_package(history)
+    if history:
+     with zipfile.ZipFile(path) as archive:raw=b'\n'.join(archive.read(name) for name in archive.namelist())
+    else:raw=path.read_bytes()
+    for value in (phrase,'SYNTHETIC-WEBSITE-USER','SYNTHETIC-WEBSITE-ä-PASS','834920187','FAKE-TEST-KEY','FAKE-TEST-PASSWORD'):
+     self.assertNotIn(value.encode(),raw)
+    self.assertIsNone(payload['credentials'])
+    self.assertEqual(payload['version'],transfer.PROTECTED_VERSION)
+    self.select('protected-target-'+str(history))
+    transfer.import_package(path,payload)
+    self.assertFalse(site_access.vault_path().exists())
+    self.assertFalse(store.persisted_credentials())
+    result=transfer.import_package(path,payload,apply_site_logins=True,apply_secrets=True,passphrase=phrase)
+    self.assertEqual(result['site_logins'],2)
+    self.assertEqual(site_access.get_secret('alpha')['abonummer'],'834920187')
+    self.assertEqual(site_access.get_secret('beta')['password'],'SYNTHETIC-WEBSITE-ä-PASS')
+    self.assertFalse(site_access.public_config('beta')['enabled'])
+    self.assertEqual(store.persisted_credentials()['smtp_password'],'FAKE-TEST-PASSWORD')
+    self.assertEqual(site_access.vault_path().stat().st_mode & 0o077,0)
+
+ def test_26_protected_import_rejects_wrong_phrase_or_modified_bindings(self):
+  path,payload,phrase=self.protected_package()
+  self.select('wrong-passphrase')
+  self.assertRaises(transfer_credentials.CredentialError,transfer.import_package,path,payload,
+                    apply_site_logins=True,passphrase='incorrect synthetic phrase')
+  changed=copy.deepcopy(payload)
+  changed['site_auth']['beta']['submit_url']='https://publisher.example.org/other-form'
+  self.assertRaises(transfer_credentials.CredentialError,transfer.import_package,path,changed,
+                    apply_site_logins=True,passphrase=phrase)
+  changed=copy.deepcopy(payload)
+  changed['settings']['smtp_host']='other.example.org'
+  self.assertRaises(transfer_credentials.CredentialError,transfer.import_package,path,changed,
+                    apply_secrets=True,passphrase=phrase)
+  self.assertEqual(store.rows('SELECT id FROM projects'),[])
+  self.assertFalse(site_access.vault_path().exists())
+
+ def test_27_restore_merges_only_selected_credentials_and_rolls_back_vault_on_commit_error(self):
+  path,payload,phrase=self.protected_package()
+  site_access.save('alpha',True,'834920188','93742')
+  before=site_access.vault_path().read_bytes()
+  expected=store.one("SELECT name FROM projects WHERE id='alpha'")['name']
+  changed=copy.deepcopy(payload)
+  changed['projects'][0]['name']='Neuer Testname'
+  original=store.db
+
+  class FailCommit:
+   def __init__(self,conn):self.conn=conn
+   def __getattr__(self,name):return getattr(self.conn,name)
+   def commit(self):raise sqlite3.OperationalError('simulated commit failure')
+
+  @contextmanager
+  def failing_db():
+   with original() as conn:yield FailCommit(conn)
+
+  with patch.object(store,'db',failing_db):
+   self.assertRaises(sqlite3.OperationalError,transfer.import_package,path,changed,
+                     apply_site_logins=True,passphrase=phrase)
+  self.assertEqual(site_access.vault_path().read_bytes(),before)
+  self.assertEqual(store.one("SELECT name FROM projects WHERE id='alpha'")['name'],expected)
+  store.save_json(store.SECRETS,{'omlx_key':'LOCAL-APP-SECRET'})
+  transfer.import_package(path,payload,apply_site_logins=True,passphrase=phrase)
+  self.assertEqual(site_access.get_secret('alpha')['abonummer'],'834920187')
+  self.assertEqual(store.persisted_credentials(),{'omlx_key':'LOCAL-APP-SECRET'})
+
+ def test_28_wrong_phrase_preserves_import_preview_without_echoing_secrets(self):
+  path,_,phrase=self.protected_package()
+  self.select('protected-http-target');client,csrf=self.client()
+  response=client.post('/transfer/preview',data={'csrf':csrf},files={'file':('protected.json',path.read_bytes())})
+  self.assertEqual(response.status_code,200)
+  form=BeautifulSoup(response.text,'html.parser').select_one('form[action="/transfer/import"]')
+  fields={'csrf':csrf,'token':form.select_one('[name=token]')['value'],'confirm':'on','apply_site_logins':'on'}
+  wrong='wrong test passphrase'
+  response=client.post('/transfer/import',data={**fields,'import_passphrase':wrong})
+  self.assertEqual(response.status_code,400)
+  self.assertIn('Importvorschau',response.text)
+  self.assertNotIn(wrong,response.text)
+  self.assertEqual(store.rows('SELECT id FROM projects'),[])
+  retry=BeautifulSoup(response.text,'html.parser')
+  self.assertFalse(retry.select_one('[name=apply_settings]').has_attr('checked'))
+  self.assertTrue(retry.select_one('[name=apply_site_logins]').has_attr('checked'))
+  response=client.post('/transfer/import',data={**fields,'import_passphrase':phrase})
+  self.assertEqual(response.status_code,200)
+  self.assertNotIn(phrase,response.text)
+  self.assertNotIn('SYNTHETIC-WEBSITE',response.text)
+  self.assertEqual(site_access.get_secret('beta')['username'],'SYNTHETIC-WEBSITE-USER')
 
 if __name__=='__main__':unittest.main(verbosity=2)

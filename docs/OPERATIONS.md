@@ -42,9 +42,16 @@ die Eigentümerschaft der betroffenen Archivdatei für den App-Benutzer
 ## Vollständige Volume-Sicherung
 
 Die Oberfläche exportiert Projekte/Einstellungen und optional Verlauf/Dateien.
-Für Browseranmeldungen und Webseitenzugänge ist zusätzlich eine vollständige
-Sicherung der vier Daten-Volumes nötig. Das Archiv ist vertraulich und sollte
-extern verschlüsselt aufbewahrt werden. Portainer-ENV separat sichern.
+Unter **Export / Import → Geschützter Export mit Zugangsdaten** lassen sich die
+gespeicherten Website-Logins und App-Zugangsdaten in JSON- und ZIP-Paketen mitnehmen.
+Format 10 verschlüsselt den Zugangsdatenblock mit einer eigenen Passphrase.
+Projektdefinitionen und Archivbelege bleiben lesbar. Beim Import können
+Projekt- und App-Zugangsdaten separat übernommen werden. Die Passphrase wird
+beim Import benötigt und getrennt vom Exportpaket aufbewahrt.
+
+Browserprofile mit Sitzungen und Cookies gehören zur vollständigen Sicherung
+der vier Daten-Volumes. Das Archiv ist vertraulich und sollte extern
+verschlüsselt aufbewahrt werden. Portainer-ENV separat sichern.
 
 Eine laufende Prüfung zuerst abschließen lassen. Dann auf dem Linux-Docker-Host:
 

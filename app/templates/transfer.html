@@ -1,16 +1,23 @@
 {{heading('Export / Import','Export / Import')}}
 {% if transfer_error %}<div class="warning" role="alert">{{icon('alert')}}<span>{{transfer_error}}</span></div>{% endif %}
 {% if import_result %}
-<section class="card"><h2>Import abgeschlossen</h2><p>{{import_result.projects}} Projekte übernommen · {{import_result.added.runs}} Prüfungen und {{import_result.added.changes}} Änderungen ergänzt · {{import_result.files}} Dateien hinzugefügt.</p><p class="field-help">Vorhandene Verlaufseinträge bleiben erhalten. Sicherung vor dem Import: <code>{{import_result.recovery}}</code></p><a class="button small" href="/">{{icon('folder')}}Projekte öffnen</a></section>
+<section class="card"><h2>Import abgeschlossen</h2><p>{{import_result.projects}} Projekte übernommen · {{import_result.added.runs}} Prüfungen und {{import_result.added.changes}} Änderungen ergänzt · {{import_result.files}} Dateien hinzugefügt.</p>{% if import_result.site_logins %}<p>Projektzugänge übernommen · {{import_result.site_logins}}</p>{% endif %}<p class="field-help">Vorhandene Verlaufseinträge bleiben erhalten. Sicherung vor dem Import: <code>{{import_result.recovery}}</code></p><a class="button small" href="/">{{icon('folder')}}Projekte öffnen</a></section>
 {% elif import_preview %}
 <section class="card"><h2>Importvorschau</h2><p><strong>{{import_preview.new}}</strong> neue Projekte · <strong>{{import_preview.updated}}</strong> vorhandene Projekte aktualisieren</p>
 {% if import_preview.kind=='archive' %}<p>{{import_preview.counts.runs}} Prüfungen · {{import_preview.counts.changes}} Änderungen · {{import_preview.counts.reports}} Berichte · {{import_preview.files}} Dateien</p>{% endif %}
 <details class="transfer-projects"><summary>Projekte ({{import_preview.projects|length}})</summary><ul>{% for p in import_preview.projects %}<li>{{p.name}} <span class="muted">{{'aktualisieren' if p.existing else 'neu'}}</span></li>{% endfor %}</ul></details>
 <form method="post" action="/transfer/import"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="token" value="{{import_token}}">
-<label class="check-label"><input type="checkbox" name="apply_settings" checked>App-Einstellungen übernehmen ({{import_preview.settings}})</label>
-{% if import_preview.credentials %}<label class="check-label"><input type="checkbox" name="apply_secrets">Enthaltene API- und SMTP-Zugangsdaten übernehmen</label>{% endif %}
-<label class="check-label"><input type="checkbox" name="activate">Aktivierungsstatus für automatische Prüfungen und E-Mail-Versand übernehmen</label>
-<p class="field-help">Ohne diese Auswahl werden importierte Projekte pausiert und übernommene E-Mail-Einstellungen deaktiviert.</p>
+<label class="check-label"><input type="checkbox" name="apply_settings" {% if import_apply_settings|default(true) %}checked{% endif %}>App-Einstellungen übernehmen ({{import_preview.settings}})</label>
+{% if import_preview.protected_credentials %}
+<fieldset><legend>Verschlüsselte Zugangsdaten</legend>
+<label class="check-label"><input type="checkbox" name="apply_site_logins" {% if import_site_logins %}checked{% endif %}>Projektzugänge übernehmen</label>
+<label class="check-label"><input type="checkbox" name="apply_secrets" {% if import_app_secrets %}checked{% endif %}>App-Zugangsdaten für oMLX, SMTP und Telegram übernehmen</label>
+<div class="field-group"><label for="import-passphrase">Export-Passphrase</label><input type="password" id="import-passphrase" name="import_passphrase" autocomplete="off" maxlength="1024" aria-describedby="import-passphrase-help"></div>
+<p class="field-help" id="import-passphrase-help">Die Passphrase wird zur Übernahme der ausgewählten Zugangsdaten benötigt. Bei gleicher Projekt-ID ersetzt ein importierter Zugang den gespeicherten Zugang dieses Projekts.</p>
+</fieldset>
+{% elif import_preview.credentials %}<label class="check-label"><input type="checkbox" name="apply_secrets">App-Zugangsdaten aus dem bisherigen Exportformat übernehmen</label>{% endif %}
+<label class="check-label"><input type="checkbox" name="activate" {% if import_activate %}checked{% endif %}>Aktivierungsstatus für automatische Prüfungen und E-Mail-Versand übernehmen</label>
+<p class="field-help">Ohne diese Auswahl starten importierte Projekte pausiert. Übernommene Website-Anmeldungen und E-Mail-Einstellungen bleiben deaktiviert.</p>
 {% if import_preview.retry_plans_cancelled %}<p class="field-help">Vorgemerkte Wiederholungen werden beim Import nicht gestartet ({{import_preview.retry_plans_cancelled}}).</p>{% endif %}
 <label class="check-label"><input type="checkbox" name="confirm" required>Vorhandene Projekte mit gleicher ID dürfen aktualisiert werden.</label>
 <p class="field-help">Andere Projekte bleiben erhalten. Identische Verlaufseinträge werden nicht doppelt importiert. Vor dem Import wird eine Sicherung erstellt.</p>
@@ -19,8 +26,15 @@
 <div class="transfer-grid"><section class="card"><h2>Export</h2><form method="post" action="/transfer/export" data-download>
 <input type="hidden" name="csrf" value="{{csrf}}"><div class="field-group"><label for="export-kind">Umfang</label><select id="export-kind" name="kind"><option value="configuration">Einfach · JSON</option><option value="archive">Mit Verlauf und Dateien · ZIP</option></select></div>
 <p class="field-help">JSON: Projekte, Prompts, Farben, Tags, Zeitpläne und App-Einstellungen. ZIP zusätzlich: Prüfungen, Änderungen, Bestätigungen, Berichte, Dokumente und Screenshots.</p>
-<label class="check-label"><input type="checkbox" name="include_secrets">API-Token und SMTP-Passwort einschließen</label><p class="field-help">Zugangsdaten sind standardmäßig ausgeschlossen. Exporte mit Zugangsdaten unverschlüsselt nur sicher aufbewahren.</p>
+<details class="transfer-projects"><summary>Geschützter Export mit Zugangsdaten</summary>
+<label class="check-label"><input type="checkbox" name="include_secrets">Gespeicherte Projekt- und App-Zugangsdaten verschlüsselt einschließen</label>
+<div class="form-grid">
+<div class="field-group"><label for="export-passphrase">Export-Passphrase</label><input type="password" id="export-passphrase" name="export_passphrase" autocomplete="new-password" minlength="12" maxlength="1024"></div>
+<div class="field-group"><label for="export-passphrase-repeat">Passphrase wiederholen</label><input type="password" id="export-passphrase-repeat" name="export_passphrase_repeat" autocomplete="new-password" minlength="12" maxlength="1024"></div>
+</div>
+<p class="field-help">Die Option schützt die gespeicherten Anmeldedaten mit einer eigenen Passphrase ab 12 Zeichen. Diese Passphrase wird beim Import benötigt. Die übrigen Exportdaten bleiben lesbar.</p>
+</details>
 <div class="form-footer"><button>{{icon('download')}}Export herunterladen</button></div></form></section>
 <section class="card"><h2>Import</h2><form method="post" action="/transfer/preview" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{csrf}}"><div class="field-group"><label for="import-file">Exportdatei</label><input id="import-file" type="file" name="file" accept=".json,.zip,application/json,application/zip" required></div><p class="field-help">JSON oder ZIP aus dem Webmonitor, bis 512 MB. Zuerst Datei prüfen und Vorschau anzeigen.</p><div class="form-footer"><button data-loading="Datei wird geprüft …">{{icon('upload')}}<span data-button-label>Import prüfen</span></button></div></form></section></div>
-<details class="card"><summary>Umfang und Grenzen</summary><div class="details-body"><p>Die App-Einstellungen enthalten oMLX-Adresse, Modellzuweisungen und E-Mail-Konfiguration. Darstellungsoptionen dieses Browsers sind davon unabhängig.</p><p>Anmeldeanbieter und Website-Zuordnung werden übernommen; private Webseiten-Zugangsdaten und Browserprofile werden nicht exportiert. Dafür steht das vollständige administrative Backup zur Verfügung. Ein Import ändert keine Netzwerkfreigaben. Bei einer anderen Serveradresse muss die Erreichbarkeit anschließend geprüft werden.</p><p>Bei widersprüchlichen Belegen wird der Import abgebrochen. Vorhandene Quellen werden nicht stillschweigend überschrieben. Historische Berichte werden nicht erneut versandt.</p></div></details>
+<details class="card"><summary>Umfang und Grenzen</summary><div class="details-body"><p>Die App-Einstellungen enthalten oMLX-Adresse, Modellzuweisungen und E-Mail-Konfiguration. Darstellungsoptionen dieses Browsers sind davon unabhängig.</p><p>Der geschützte Export enthält Zugangsdaten aus „Webseitenzugang“ und die in der App gespeicherten oMLX-, SMTP- und Telegram-Zugangsdaten. Browserprofile mit Cookies und Sitzungen sowie Stack-Variablen gehören zum administrativen Backup. Bei einer anderen Serveradresse muss die Erreichbarkeit anschließend geprüft werden.</p><p>Bei widersprüchlichen Belegen wird der Import abgebrochen. Vorhandene Quellen werden nicht stillschweigend überschrieben. Historische Berichte werden nicht erneut versandt.</p></div></details>
 {% endif %}

@@ -28,6 +28,7 @@ import attention
 from prompt_examples import EXAMPLES
 from project_meta import DEFAULT_COLOR, normalize_color, normalize_tags, appearance
 import transfer
+import transfer_credentials
 import site_access
 import scheduling
 import site_safety
@@ -1457,6 +1458,13 @@ async def transfer_page(request: Request):
 @app.post('/transfer/export')
 async def transfer_export(request: Request):
     f=await request.form()
+    protected=f.get('include_secrets')=='on'
+    passphrase=str(f.get('export_passphrase',''))
+    repeated=str(f.get('export_passphrase_repeat',''))
+    if protected and passphrase!=repeated:
+        return transfer_error(request,'Die beiden Export-Passphrasen stimmen nicht überein.')
+    if not protected and (passphrase or repeated):
+        return transfer_error(request,'Wähle den geschützten Export aus, um die Passphrase zu verwenden.')
     if engine.BUSY.locked() or one("SELECT id FROM runs WHERE status IN ('running','queued')"):
         return transfer_error(request,'Erst laufende oder wartende Prüfungen beenden lassen.',409)
     folder=Path(tempfile.mkdtemp(prefix='export-',dir=transfer.workspace()))
@@ -1464,14 +1472,14 @@ async def transfer_export(request: Request):
     target=folder/('webmonitor.zip' if extended else 'webmonitor.json')
     try:
         async with engine.BUSY:
-            transfer.export_to(target,history=extended,include_secrets=f.get('include_secrets')=='on')
+            transfer.export_to(target,history=extended,passphrase=passphrase if protected else None)
         stamp=datetime.now(TZ).strftime('%Y%m%d-%H%M%S')
-        return FileResponse(target,media_type='application/zip' if extended else 'application/json',filename=f'Webmonitor-{stamp}'+('.zip' if extended else '.json'),background=BackgroundTask(shutil.rmtree,folder))
+        return FileResponse(target,media_type='application/zip' if extended else 'application/json',filename=f'Webmonitor-{stamp}'+('.zip' if extended else '.json'),headers={'Cache-Control':'no-store'},background=BackgroundTask(shutil.rmtree,folder))
     except (transfer.Invalid,OSError,ValueError) as error:
         shutil.rmtree(folder,ignore_errors=True)
         if isinstance(error, PermissionError):
             return transfer_error(request,'Export wegen fehlender Dateirechte abgebrochen. Eigentümer und Rechte für den App-Benutzer (UID 1000) prüfen.')
-        return transfer_error(request,str(error) if isinstance(error,transfer.Invalid) else 'Export fehlgeschlagen. Freien Speicher und Archivdateien prüfen.')
+        return transfer_error(request,str(error) if isinstance(error,(transfer.Invalid,transfer_credentials.CredentialError,site_access.AccessError)) else 'Export fehlgeschlagen. Freien Speicher und Archivdateien prüfen.')
 
 @app.post('/transfer/preview')
 async def transfer_preview(request: Request):
@@ -1504,13 +1512,23 @@ async def transfer_preview(request: Request):
 async def transfer_import(request: Request):
     f=await request.form()
     if f.get('confirm')!='on':return transfer_error(request,'Import in der Vorschau bestätigen.')
-    if engine.BUSY.locked():return transfer_error(request,'Erst laufende Prüfungen beenden lassen.',409)
+    if engine.BUSY.locked() or engine.REPORT_LOCK.locked() or notifications.LOCK.locked():
+        return transfer_error(request,'Erst laufende Prüfungen, Berichte und den Telegram-Versand beenden lassen.',409)
+    token=str(f.get('token',''))
     try:
-        folder=transfer.pending(str(f.get('token','')),request.state.csrf)
+        folder=transfer.pending(token,request.state.csrf)
         payload=transfer.read_package(folder/'package')
-        async with engine.BUSY:
-            result=transfer.import_package(folder/'package',payload,apply_settings=f.get('apply_settings')=='on',apply_secrets=f.get('apply_secrets')=='on',activate=f.get('activate')=='on')
+        async with engine.BUSY, engine.REPORT_LOCK, notifications.LOCK:
+            result=transfer.import_package(folder/'package',payload,apply_settings=f.get('apply_settings')=='on',
+                apply_secrets=f.get('apply_secrets')=='on',activate=f.get('activate')=='on',
+                apply_site_logins=f.get('apply_site_logins')=='on',passphrase=f.get('import_passphrase'))
         shutil.rmtree(folder)
         return render(request,'transfer',import_result=result)
+    except transfer_credentials.CredentialError as error:
+        response=render(request,'transfer',transfer_error=str(error),import_preview=transfer.preview(payload),import_token=token,
+                        import_site_logins=f.get('apply_site_logins')=='on',import_app_secrets=f.get('apply_secrets')=='on',
+                        import_apply_settings=f.get('apply_settings')=='on',import_activate=f.get('activate')=='on')
+        response.status_code=400
+        return response
     except (transfer.Invalid,ValueError,TypeError,KeyError,OSError,sqlite3.Error) as error:
         return transfer_error(request,str(error) if isinstance(error,transfer.Invalid) else 'Import fehlgeschlagen und zurückgerollt. Vorhandene Daten bleiben erhalten.')
