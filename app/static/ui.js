@@ -285,12 +285,14 @@
       const time = Date.parse(value || '');
       return Number.isFinite(time) ? time : -Infinity;
     };
-    const sortProjects = () => {
+    const sortProjects = prioritizeRunning => {
+      if (!projectSort || !projectGrid) return;
       const field = projectSort.value;
       const sorted = [...projects].sort((a, b) => {
-        const first = Number(b.dataset.error) - Number(a.dataset.error);
+        const running = prioritizeRunning ? Number(b.dataset.running) - Number(a.dataset.running) : 0;
+        const errors = Number(b.dataset.error) - Number(a.dataset.error);
         const newest = field === 'name' ? 0 : sortTime(b.dataset[field]) - sortTime(a.dataset[field]);
-        return first || newest || projectNames.compare(a.dataset.projectName, b.dataset.projectName)
+        return running || errors || newest || projectNames.compare(a.dataset.projectName, b.dataset.projectName)
           || a.dataset.projectId.localeCompare(b.dataset.projectId);
       });
       const focused = document.activeElement;
@@ -306,9 +308,8 @@
       if ([...projectSort.options].some(option => option.value === saved)) projectSort.value = saved;
       projectSort.addEventListener('change', () => {
         write('project-sort', projectSort.value);
-        sortProjects();
+        updateProjects();
       });
-      sortProjects();
     }
     let selected = 'all';
     let automationVersion = 0;
@@ -344,17 +345,19 @@
         const output = button.querySelector('[data-filter-count]');
         const count = base.filter(card => matchesStatus(card, button.dataset.filter)).length;
         if (output) output.textContent = String(count);
+        button.setAttribute('aria-pressed', String(button.dataset.filter === selected));
         button.classList.toggle('has-errors', button.dataset.filter === 'error' && count > 0);
         button.classList.toggle('has-paused', button.dataset.filter === 'paused' && count > 0);
       });
       tagChoices.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.tagChoice === tag)));
       const empty = document.querySelector('[data-no-results]'); if (empty) empty.hidden = count > 0 || projects.length === 0;
       const output = document.querySelector('[data-result-count]'); if (output) output.textContent = `${count}/${projects.length}`;
+      sortProjects(selected === 'all' && !tag && !words.length);
     };
     search?.addEventListener('input', updateProjects);
     tagFilter?.addEventListener('change', updateProjects);
     tagChoices.forEach(button => button.addEventListener('click', () => {
-      if (tagFilter) tagFilter.value = button.dataset.tagChoice;
+      if (tagFilter) tagFilter.value = tagFilter.value === button.dataset.tagChoice ? '' : button.dataset.tagChoice;
       updateProjects();
     }));
     if (tagFilter) {
@@ -362,7 +365,8 @@
       if (requestedTag && [...tagFilter.options].some(option => option.value === requestedTag)) tagFilter.value = requestedTag;
     }
     filters.forEach(button => button.addEventListener('click', () => {
-      selected = button.dataset.filter; filters.forEach(other => other.setAttribute('aria-pressed', String(other === button))); updateProjects();
+      selected = selected === button.dataset.filter ? 'all' : button.dataset.filter;
+      updateProjects();
     }));
     if (projects.length) updateProjects();
     document.querySelectorAll('[data-automation-form]').forEach(form => form.addEventListener('submit', async event => {
@@ -439,6 +443,7 @@
             const status = known ? project.status : '';
             if (requestedAutomationVersion === automationVersion && !card.dataset.automationBusy) applyAutomation(card,enabled);
             card.dataset.error = ['failed','partial','protection'].includes(status) ? '1' : '0';
+            card.dataset.running = status === 'running' ? '1' : '0';
             card.dataset.lastChecked = project.last_checked || '';
             card.dataset.lastChange = project.last_change || '';
             card.dataset.lastSuccess = project.last_success || '';
@@ -461,7 +466,6 @@
             refreshSuccess(card,project.last_success);
           });
           updateCountdowns(); updateRelativeTimes(); updateProjects();
-          if (projectSort && projectGrid) sortProjects();
         } catch {} // Retain the last confirmed state during network failures.
         finally { clearTimeout(timeout); statusPending = false; }
       };

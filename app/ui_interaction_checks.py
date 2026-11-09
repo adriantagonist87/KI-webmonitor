@@ -144,8 +144,9 @@ class FrontendInteractions(unittest.IsolatedAsyncioTestCase):
         alpha, beta, gamma, delta = project(), project('beta', 1), project('gamma'), project('delta', 1)
         alpha.update(last_checked='2026-11-03T10:00:00Z', last_change='2026-11-02T10:00:00Z',
                      last_success='2026-11-03T10:00:00Z')
-        beta.update(last_checked='2026-11-04T10:00:00Z', last_change='2026-11-01T10:00:00Z')
+        beta.update(status='queued', last_checked='2026-11-04T10:00:00Z', last_change='2026-11-01T10:00:00Z')
         gamma.update(status='failed', last_checked='2026-11-01T10:00:00Z')
+        delta.update(notice_count=1)
         self.dashboard_projects = [alpha, beta, gamma, delta]
 
         async def status(route):
@@ -173,11 +174,42 @@ class FrontendInteractions(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await order(), ['beta', 'delta'])
         await self.page.locator('[data-tag-filter]').select_option('')
         await sort.select_option('lastChecked')
+        alpha.update(status='running')
         gamma.update(status='success', last_checked='2026-11-06T10:00:00Z')
         delta.update(status='partial', last_checked='2026-11-05T10:00:00Z')
         await self.page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
-        await expect(cards.first).to_have_attribute('data-project-id', 'delta')
+        await expect(cards.first).to_have_attribute('data-project-id', 'alpha')
+        self.assertEqual(await order(), ['alpha', 'delta', 'gamma', 'beta'])
+
+        for key, expected in [('error', ['delta']), ('notices', ['delta']),
+                              ('active', ['delta', 'gamma', 'beta', 'alpha'])]:
+            chip = self.page.locator(f'[data-filter={key}]')
+            await chip.click()
+            await expect(chip).to_have_attribute('aria-pressed', 'true')
+            self.assertEqual(await order(), expected)
+            await chip.click()
+            await expect(self.page.locator('[data-filter=all]')).to_have_attribute('aria-pressed', 'true')
+            self.assertEqual(await order(), ['alpha', 'delta', 'gamma', 'beta'])
+
+        tag = self.page.locator('[data-tag-choice=arbeit]')
+        await tag.click()
+        self.assertEqual(await order(), ['gamma', 'alpha'])
+        await tag.click()
+        await expect(self.page.locator('[data-tag-choice=""]')).to_have_attribute('aria-pressed', 'true')
+        self.assertEqual(await order(), ['alpha', 'delta', 'gamma', 'beta'])
+
+        search = self.page.locator('[data-project-search]')
+        await search.fill('Projekt')
         self.assertEqual(await order(), ['delta', 'gamma', 'beta', 'alpha'])
+        await search.clear()
+        self.assertEqual(await order(), ['alpha', 'delta', 'gamma', 'beta'])
+        await self.page.reload(wait_until='networkidle')
+        self.assertEqual(await order(), ['alpha', 'delta', 'gamma', 'beta'])
+
+        alpha.update(status='success', last_checked='2026-11-07T10:00:00Z')
+        await self.page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+        await expect(cards.first).to_have_attribute('data-project-id', 'delta')
+        self.assertEqual(await order(), ['delta', 'alpha', 'gamma', 'beta'])
 
     async def test_01_icon_actions_breadcrumbs_and_keyboard_preserve_typing(self):
         await self.open()

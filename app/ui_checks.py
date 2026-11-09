@@ -111,7 +111,7 @@ class UI(unittest.TestCase):
    self.assertTrue(link.get('aria-label','').startswith(link.get_text(strip=True)+' · '))
   return links
 
- def test_dashboard_orders_completed_checks_and_exposes_confirmed_change_dates(self):
+ def test_dashboard_prioritizes_running_checks_and_exposes_confirmed_change_dates(self):
   recent=self.history_project('sort-recent')
   older=self.history_project('sort-older')
   error=self.history_project('sort-error')
@@ -133,11 +133,12 @@ class UI(unittest.TestCase):
   self.history_change(recent,'sort-recent-ok','Inhalt geändert',relevance='irrelevant')
   page=BeautifulSoup(self.client.get('/').text,'html.parser')
   cards=page.select('[data-project-id^="sort-"]')
-  self.assertEqual([card['data-project-id'] for card in cards],[error,recent,older,pending])
-  self.assertEqual(cards[2]['data-last-change'],detected)
+  self.assertEqual([card['data-project-id'] for card in cards],[older,error,recent,pending])
+  self.assertEqual([card['data-running'] for card in cards],['1','0','0','0'])
+  self.assertEqual(cards[0]['data-last-change'],detected)
   self.assertEqual(cards[3]['data-last-checked'],'')
   data={p['id']:p for p in self.client.get('/api/project-status').json()['projects']}
-  self.assertEqual(data[older]['last_checked'],cards[2]['data-last-checked'])
+  self.assertEqual(data[older]['last_checked'],cards[0]['data-last-checked'])
   self.assertEqual(data[older]['last_change'],detected)
   self.assertIsNone(data[recent]['last_change'])
   self.assertIsNone(data[pending]['last_checked'])

@@ -585,7 +585,8 @@ async def home(request: Request):
         p.update(attention.summary(p['id']))
         decorate_project(p)
         p['last_change'] = attention.latest_relevant_change(p['id'])
-    projects.sort(key=lambda p: (p['status'] in DASHBOARD_ERRORS, dashboard_check_time(p)), reverse=True)
+    projects.sort(key=lambda p: (p['status'] == 'running', p['status'] in DASHBOARD_ERRORS,
+                                 dashboard_check_time(p)), reverse=True)
     return render(request, 'home', projects=projects, tag_options=known_tags())
 
 @app.get('/api/project-status')
