@@ -38,17 +38,24 @@ class WeeklyReport(unittest.TestCase):
     def test_01_demo_unique_totals_and_two_notice_events(self):
         m=model();self.assertEqual({k:m['counts'][k] for k in ('sources','changed','notices','unchanged')},{'sources':14,'changed':2,'notices':1,'unchanged':11})
         self.assertEqual(m['projects']['2']['notice_count'],2)
-    def test_02_tags_current_colors_and_empty_group(self):
-        bundle=reports.render(model());soup=BeautifulSoup(bundle['html'],'html.parser')
-        self.assertEqual([(e['data-tag-name'],e['bgcolor']) for e in soup.select('[data-tag-name]')],[('Arbeit','#df482a'),('Privat','#2f88d0')])
-        self.assertIn('0 Quellen',soup.select('[data-tag-name]')[1].text)
+    def test_02_tags_are_compact_in_the_overview(self):
+        data=demo()
+        data[0][3]['tags']=['Privat']
+        soup=BeautifulSoup(reports.render(model(data))['html'],'html.parser')
+        tags=soup.select('[data-source-overview] [data-tag-name]')
+        self.assertEqual([tag['data-tag-name'] for tag in tags],['Arbeit','Arbeit','Privat'])
+        self.assertTrue(all(not tag.has_attr('bgcolor') for tag in tags))
     def test_03_order_and_three_quiet_columns(self):
         bundle=reports.render(model())
         html=bundle['html']
-        self.assertLess(html.index('Relevante Änderungen'),html.index('Keine Änderungen'))
+        self.assertLess(html.index('Relevante Änderungen'),html.index('Alle überwachten Quellen'))
+        self.assertIn('In 2 Quellen wurden relevante Änderungen festgestellt.',html)
         self.assertNotIn('Hinweise',html+bundle['text'])
         self.assertIn('13 überwachte Quellen',bundle['text'])
-        soup=BeautifulSoup(html,'html.parser');table=soup.select_one('[data-quiet-columns]');self.assertEqual(len(table.find('tr',recursive=False).find_all('td',recursive=False)),3)
+        soup=BeautifulSoup(html,'html.parser')
+        self.assertEqual([cell.get_text(strip=True) for cell in soup.select('[data-change-table] th')],['Quelle','Änderung'])
+        self.assertEqual(len(soup.select('[data-change-project-id]')),2)
+        table=soup.select_one('[data-quiet-columns]');self.assertEqual(len(table.find('tr',recursive=False).find_all('td',recursive=False)),3)
         self.assertEqual(len(soup.select('[data-project-id]')),13)
         self.assertEqual(len(table.select('[data-project-id]')),11)
     def test_04_later_failed_run_does_not_hide_change(self):
@@ -70,7 +77,10 @@ class WeeklyReport(unittest.TestCase):
         self.assertEqual(len(soup.select('[data-project-id]')),99);self.assertEqual(len(soup.select('[data-category="unchanged"]')),97)
     def test_08_zero_changes_and_no_projects(self):
         data=list(demo());data[1]=data[1][:14];data[2]=[];m=model(data)
-        self.assertEqual(m['counts']['unchanged'],14);self.assertNotIn('Relevante Änderungen',reports.render(m)['html'])
+        self.assertEqual(m['counts']['unchanged'],14)
+        html=reports.render(m)['html']
+        self.assertNotIn('data-change-table',html)
+        self.assertIn('Es wurden keine relevanten Änderungen festgestellt.',html)
         data[0]=data[1]=[];m=model(data);bundle=reports.render(m);self.assertEqual(m['counts']['sources'],0);report_images.validate(bundle['images'],bundle['html'])
     def test_09_xss_and_unsafe_urls_are_not_emitted(self):
         data=list(demo());data[0][0].update(name='<img src=x onerror=evil()> & "lang" '+('Titel '*30),url='javascript:evil()')
@@ -81,12 +91,13 @@ class WeeklyReport(unittest.TestCase):
     def test_10_project_links_and_neutral_styles(self):
         m=model();soup=BeautifulSoup(reports.render(m)['html'],'html.parser')
         for p in m['projects'].values():
-            a=soup.find('a',href=p['url'])
+            a=soup.select_one(f'[data-source-overview] [data-project-id="{p["id"]}"] a')
             if p['category']=='notice':
                 self.assertIsNone(a)
                 continue
-            self.assertEqual(a.get_text(),p['name'] if p['category']=='unchanged' else 'Originalquelle')
-            self.assertIn('text-decoration:none',a['style'])
+            self.assertEqual(a.get_text(),p['name'])
+            self.assertEqual(a['href'],p['url'])
+            self.assertIn('text-decoration:underline',a['style'])
         app_links=[a['href'] for a in soup.find_all('a') if a.get_text()=='Webmonitor ›']
         self.assertEqual(set(app_links),{ORIGIN+'/projects/'+str(i) for i in range(2)})
     def test_11_no_origin_no_local_app_links_and_secret_query_rejected(self):

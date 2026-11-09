@@ -89,17 +89,21 @@ class DistributionTests(unittest.TestCase):
         filtered['projects']['public']['app_url']='https://monitor.example.org/runs/proof'
         bundle=email_reports.render(filtered)
         anchors=BeautifulSoup(bundle['html'],'html.parser').select('a[href]')
-        self.assertEqual([(a['href'],a.get_text()) for a in anchors],[(article,'Originalquelle')])
+        self.assertEqual([(a['href'],a.get_text()) for a in anchors],
+                         [(article,'Originalquelle'),(project['url'],project['name'])])
         self.assertIn(article,bundle['text'])
         for url in (overview,document,attachment,navigation):
             self.assertNotIn(url,bundle['html']+bundle['text'])
         self.assertNotIn('monitor.example.org',bundle['html']+bundle['text'])
         admin=BeautifulSoup(email_reports.render(model)['html'],'html.parser')
+        change_rows=admin.select('tr[data-change-project-id="public"]')
+        self.assertEqual(len(change_rows),1)
+        self.assertEqual([a['href'] for a in change_rows[0].select('a[href]')],
+                         [article,'https://monitor.example.org/projects/public'])
         admin_rows=admin.select('tr[data-project-id="public"]')
         self.assertEqual(len(admin_rows),2)
         for row in admin_rows:
-            self.assertEqual([a['href'] for a in row.select('a[href]')],
-                             [article,'https://monitor.example.org/projects/public'])
+            self.assertEqual([a['href'] for a in row.select('a[href]')],[project['url']])
 
     def test_old_recipient_links_are_filtered_at_delivery_preview_and_eml(self):
         _,children=self.batch();child=children[0];rid=child['id']

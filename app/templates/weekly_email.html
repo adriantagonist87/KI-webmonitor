@@ -1,0 +1,114 @@
+{% macro mail_link(url, label) -%}
+{% if url %}<a href="{{ url }}" target="_blank" rel="noopener noreferrer" style="color:#245b83;text-decoration:underline">{{ label }}</a>{% else %}{{ label }}{% endif %}
+{%- endmacro %}
+{% macro source_name(project, linked=false) %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed">
+  <tr>
+    <td width="22" valign="top"><img src="cid:{{ project.cid }}" width="16" height="16" alt="" style="display:block;border:0"></td>
+    <td data-source-name valign="top" style="font-size:13px;line-height:18px;color:#19283e;word-wrap:break-word;overflow-wrap:break-word">
+      {% if linked %}{{ mail_link(project.url, project.name) }}{% else %}{{ project.name }}{% endif %}
+    </td>
+  </tr>
+</table>
+{% endmacro %}
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Wochenbericht · KI-Webmonitor</title>
+</head>
+<body style="margin:0;padding:12px 0;background:#f1f4f8;color:#19283e;font-family:Arial,Helvetica,sans-serif">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr><td align="center">
+<table role="presentation" width="760" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="width:100%;max-width:760px;background:#ffffff;border:1px solid #d3dde9;font-family:Arial,Helvetica,sans-serif;color:#19283e">
+<tr><td style="padding:16px 16px 18px">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;border-bottom:2px solid #e75b28">
+    <colgroup><col width="52"><col><col width="22%"></colgroup>
+    <tr>
+      <td rowspan="2" valign="top" style="padding:2px 0 12px"><img src="cid:{{ logo }}" width="42" height="42" alt="KI-Webmonitor" style="display:block;border:0"></td>
+      <td colspan="2" valign="top">
+        <div style="font-size:13px;line-height:17px"><span style="color:#007cba">KI-</span>Webmonitor</div>
+        <h1 style="margin:0 0 4px;font-size:24px;line-height:29px;color:#19283e">Wochenbericht</h1>
+      </td>
+    </tr>
+    <tr>
+      <td valign="top" style="padding:0 4px 12px 0;font-size:12px;line-height:17px;color:#526580">{{ period }}</td>
+      <td align="right" valign="bottom" style="padding:0 0 12px 4px;font-size:12px;line-height:17px;color:#526580">{{ source_count }} überwachte Quellen</td>
+    </tr>
+  </table>
+  <p style="margin:11px 0 16px;font-size:14px;line-height:20px"><strong>Zusammenfassung</strong> · {{ summary }}</p>
+  {% if changed %}
+  <table data-change-table width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;border-collapse:collapse;border:1px solid #d3dde9">
+    <colgroup><col width="37%"><col width="63%"></colgroup>
+    <thead>
+      <tr><td colspan="2" bgcolor="#245673" style="padding:7px 10px;color:#ffffff"><h2 style="margin:0;font-size:16px;line-height:21px">Relevante Änderungen ({{ changed|length }})</h2></td></tr>
+      <tr bgcolor="#e5ecf3">
+        <th scope="col" width="37%" align="left" style="padding:6px 10px;font-size:13px;border-right:1px solid #d3dde9">Quelle</th>
+        <th scope="col" width="63%" align="left" style="padding:6px 10px;font-size:13px">Änderung</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for project in changed %}
+      <tr data-change-project-id="{{ project.id }}">
+        <td valign="top" style="padding:8px 10px;border-top:1px solid #d3dde9;border-right:1px solid #d3dde9">{{ source_name(project) }}</td>
+        <td valign="top" style="padding:8px 10px;border-top:1px solid #d3dde9;font-size:13px;line-height:18px;word-wrap:break-word">
+          <strong>{{ project.message }}</strong>
+          {% if project.prestandards %}<div style="margin-top:3px;color:#526580">{{ project.prestandards }}</div>{% endif %}
+          {% if project.source_page or project.app_url %}
+          <div style="margin-top:3px;font-size:12px">
+            {% if project.source_page %}{{ mail_link(project.source_page,'Originalquelle') }}{% endif %}
+            {% if project.source_page and project.app_url %} · {% endif %}
+            {% if project.app_url %}{{ mail_link(project.app_url,'Webmonitor ›') }}{% endif %}
+          </div>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <table data-source-overview role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;border:1px solid #d3dde9;border-collapse:collapse">
+    <tr><td bgcolor="#245673" style="padding:7px 10px;color:#ffffff"><h2 style="margin:0;font-size:16px;line-height:21px">Alle überwachten Quellen</h2></td></tr>
+    {% for category,label,count in overview %}
+    {% if count %}
+    <tr><td bgcolor="#e5ecf3" style="padding:6px 10px;border-top:1px solid #d3dde9"><h3 style="margin:0;font-size:14px;line-height:19px">{{ label }} ({{ count }})</h3></td></tr>
+    {% for group in groups %}
+    {% set projects = group.projects|selectattr('category', 'equalto', category)|list %}
+    {% if projects %}
+    <tr><td data-tag-name="{{ group.name }}" style="padding:6px 10px 3px;font-size:11px;line-height:15px;color:#526580"><strong>{{ group.name }}</strong></td></tr>
+    {% if category == 'changed' %}
+    {% for project in projects %}
+    <tr data-project-id="{{ project.id }}" data-category="{{ category }}"><td style="padding:4px 10px;border-top:1px solid #e6ebf2">{{ source_name(project, true) }}</td></tr>
+    {% endfor %}
+    {% else %}
+    <tr><td style="padding:2px 10px 6px">
+      <table role="presentation" data-quiet-columns="3" width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed">
+        <tr>
+          {% for column in projects|slice(3) %}
+          <td width="33%" valign="top" style="padding-right:5px">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              {% for project in column %}
+              <tr data-project-id="{{ project.id }}" data-category="{{ category }}"><td style="padding:3px 0">{{ source_name(project, true) }}</td></tr>
+              {% endfor %}
+            </table>
+          </td>
+          {% endfor %}
+        </tr>
+      </table>
+    </td></tr>
+    {% endif %}
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+    {% endfor %}
+    {% if not source_count %}
+    <tr><td style="padding:8px 10px;font-size:13px;color:#526580">Für diesen Zeitraum liegen keine Quellen im Bericht vor.</td></tr>
+    {% endif %}
+  </table>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>
