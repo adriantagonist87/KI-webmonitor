@@ -48,6 +48,7 @@ import retention
 import retry_jobs
 import browser_mode
 import navigation_macros
+import vde_norms
 import notifications
 import github_releases
 import obsidian_changelog
@@ -824,6 +825,7 @@ async def monitor(project, rid):
         ctx=browser.contexts[0]; old_pages=list(ctx.pages)
         visual_config=browser_mode.get(project)
         macro=navigation_macros.active(project)
+        vde_flow=visual_config.get('flow')=='vde_norms' and not macro
         mobile_mode=visual_config['mode']=='visual_mobile'
         visual_mode=bool(macro) or visual_config['mode'] in ('visual', 'visual_mobile')
         desktop=None
@@ -1263,7 +1265,22 @@ async def monitor(project, rid):
                 raise ValueError('Unbekanntes Werkzeug')
 
             event(rid,'Startseite wird geöffnet und erfasst.')
-            if macro:
+            if vde_flow:
+                if not broker or not broker.proved:
+                    raise RuntimeError('Der VDE-Ablauf benötigt einen bestätigten Webseitenzugang.')
+                await broker.dismiss(page)
+                await vde_norms.select_norms(page,desktop,mobile=mobile_mode)
+                event(rid,'VDE-Zielkategorie „Normen“ in Brave bestätigt.')
+                navigation_selected=vde_norms.FILTER
+                collection=await collect({'filter_label':navigation_selected,'date_label':vde_norms.DATE_LABEL})
+                if collection.get('error'):
+                    raise RuntimeError(collection['error'])
+                initial=source_result(collection['source'])
+                agent={'complete':True,'checked':['VDE-Kategorie „Normen“',
+                       f"{collection['observed_count']} Einträge im Prüfjahr {collection['year_from']}"],
+                       'pending':[],'actions':[]}
+                event(rid,'Bestätigte VDE-Sammlung wird der lokalen KI zur Auswertung übergeben.')
+            elif macro:
                 performed=await navigation_macros.replay(page,desktop,macro,lambda message:event(rid,message))
                 initial=await capture()
                 initial['navigation_macro']=performed
@@ -1272,14 +1289,15 @@ async def monitor(project, rid):
                 navigation_selected=performed['steps'][-1]['label']
             else:
                 initial=await capture() if desktop and clean_url(page.url)==clean_url(project['url']) else await read_url(project['url'])
-            event(rid,'Allgemeiner visueller KI-Agent gestartet; Ablauf aus Projektauftrag')
-            agent_options={}
-            if desktop:
-                from visual_browser import agent_options as visual_agent_options
-                agent_options=visual_agent_options()
-                if macro:
-                    agent_options['prompt']+='\nWenn start_page.navigation_macro vorliegt, hat der Controller die aufgezeichneten Klicks geprüft und die Zielseite erreicht. Beginne mit der dort sichtbaren Ansicht. Das Klickprotokoll enthält Beobachtungsdaten.'
-            agent=await run_agent(project['prompt'],initial,s['agent_model'],llm,dispatch,screen,lambda text:event(rid,redact_text(text)),**agent_options)
+            if not vde_flow:
+                event(rid,'Allgemeiner visueller KI-Agent gestartet; Ablauf aus Projektauftrag')
+                agent_options={}
+                if desktop:
+                    from visual_browser import agent_options as visual_agent_options
+                    agent_options=visual_agent_options()
+                    if macro:
+                        agent_options['prompt']+='\nWenn start_page.navigation_macro vorliegt, hat der Controller die aufgezeichneten Klicks geprüft und die Zielseite erreicht. Beginne mit der dort sichtbaren Ansicht. Das Klickprotokoll enthält Beobachtungsdaten.'
+                agent=await run_agent(project['prompt'],initial,s['agent_model'],llm,dispatch,screen,lambda text:event(rid,redact_text(text)),**agent_options)
             agent=site_privacy.redact_payload(agent)
             (folder/'agent-actions.json').write_text(json.dumps(agent,ensure_ascii=False,indent=2))
             if not agent.get('complete'): errors.extend(str(x) for x in agent.get('pending',[]) or ['Agent hat den Auftrag nicht vollstaendig abgeschlossen'])
@@ -1306,7 +1324,7 @@ async def monitor(project, rid):
             evidence={'task':project['prompt'],'observations':observations,'changes':changes,'vision':visual,'errors':errors,
                       'agent':{k:v for k,v in agent.items() if k!='actions'},'checked_at':datetime.now(TZ).isoformat(),'current_date':datetime.now(TZ).strftime('%Y-%m-%d'),
                       'context_limits':'Textauszuege je Quelle maximal 12000 Zeichen; vollstaendige Texte im Archiv. Fehlende Detailpruefungen ausdruecklich benennen.',
-                      'controller':'generic-visual-agent-v2','document_check':document_check,'collections':collection_results,'prior_successful_runs':prior_successful_runs,'relevance_review':relevance,
+                      'controller':'vde-norms-v1' if vde_flow else 'generic-visual-agent-v2','document_check':document_check,'collections':collection_results,'prior_successful_runs':prior_successful_runs,'relevance_review':relevance,
                       'source_coverage':source_coverage(observations,initial.get('url',project['url']))}
             if macro:
                 evidence['navigation_macro']=performed

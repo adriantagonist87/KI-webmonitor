@@ -34,7 +34,7 @@ def remove(pid):
         c.execute('DELETE FROM state WHERE key IN (?,?)', ('content_scopes:' + pid, 'site_auth:' + pid))
         c.execute('DELETE FROM state WHERE key IN (?,?)', ('project_icon:'+pid,'project_icon_attempt:'+pid))
         c.execute('DELETE FROM state WHERE key=?',('crawl_pace:'+pid,))
-        c.execute('DELETE FROM state WHERE key=?',('browser_mode:'+pid,))
+        c.execute('DELETE FROM state WHERE key IN (?,?)',('browser_mode:'+pid,'browser_flow:'+pid))
         c.execute('DELETE FROM state WHERE key=?',('navigation_macros:'+pid,))
         index_prefix='collection_index:'+pid+':'
         c.execute('DELETE FROM state WHERE substr(key,1,?)=?', (len(index_prefix),index_prefix))

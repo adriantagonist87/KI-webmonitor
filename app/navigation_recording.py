@@ -16,6 +16,8 @@ import store
 from visual_browser import mobile_window
 
 RECORD_SECONDS = 10 * 60
+OPEN_SECONDS = 45
+CLOSE_SECONDS = 5
 WORLD = 'kiwm-navigation-recording'
 BINDING = 'kiwmRecordNavigation'
 SCRIPT = r"""
@@ -132,17 +134,15 @@ class Recording:
             self.timeout.cancel()
         if self.install_task:
             self.install_task.cancel()
-            await asyncio.gather(self.install_task, return_exceptions=True)
+            await asyncio.wait((self.install_task,), timeout=CLOSE_SECONDS)
         try:
             if self.page:
-                with suppress(Error):
-                    await self.page.close()
-            if self.browser:
-                with suppress(Error):
-                    await self.browser.close()
+                with suppress(Error, TimeoutError):
+                    await asyncio.wait_for(self.page.close(), CLOSE_SECONDS)
         finally:
             if self.playwright:
-                await self.playwright.stop()
+                with suppress(Error, TimeoutError):
+                    await asyncio.wait_for(self.playwright.stop(), CLOSE_SECONDS)
 
 
 class Recorder:
@@ -172,7 +172,7 @@ class Recorder:
             await busy.acquire()
             self.active = recording
             try:
-                await recording.open()
+                await asyncio.wait_for(recording.open(), OPEN_SECONDS)
                 recording.timeout = asyncio.create_task(self._expire(recording, busy))
                 self.draft = None
             except BaseException:
@@ -185,7 +185,7 @@ class Recorder:
                 raise ValueError('Die Aufnahme ist nicht mehr aktiv.')
             try:
                 if keep:
-                    self.draft = (pid, await self.active.result())
+                    self.draft = (pid, await asyncio.wait_for(self.active.result(), OPEN_SECONDS))
             finally:
                 await self._end(busy)
 

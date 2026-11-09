@@ -6,6 +6,7 @@ import secrets
 import os
 import browser_mode
 import navigation_macros
+import vde_norms
 from navigation_recording import Recorder
 import shutil
 import tempfile
@@ -393,6 +394,7 @@ def render(request, page, **ctx):
     ctx.setdefault('global_schedule', scheduling.global_schedule())
     ctx.setdefault('global_schedule_label', scheduling.label(ctx['global_schedule']))
     ctx.setdefault('server_now', now())
+    ctx.setdefault('vde_norms_supported', vde_norms.matches(project_context.get('url')))
     ctx.setdefault('browser_ui_url', lan_access.browser_url(request, LAN_URL,
                    companion_url('BROWSER_UI_URL', 'http://localhost:8766'), PUBLIC_URL))
     ctx.setdefault('mailpit_ui_url', companion_url('MAILPIT_UI_URL', 'http://localhost:8767'))
@@ -423,8 +425,10 @@ def project_form_values(form):
     for field in ('name', 'url', 'prompt', 'domains', 'color'):
         value[field] = str(form.get(field, current.get(field, '')))
     value['crawl_profile'] = str(form.get('crawl_profile',current.get('crawl_profile','gentle')))
-    value['browser_input'] = {'mode':str(form.get('browser_mode',current.get('browser_input',{}).get('mode','standard'))),
-                              'entry_url':str(form.get('browser_entry_url',current.get('browser_input',{}).get('entry_url','')))}
+    previous_input = current.get('browser_input', {})
+    value['browser_input'] = {'mode':str(form.get('browser_mode',previous_input.get('mode','standard'))),
+                              'entry_url':str(form.get('browser_entry_url',previous_input.get('entry_url',''))),
+                              'flow':str(form.get('browser_flow',previous_input.get('flow','')))}
     value.update(id=pid, enabled=form.get('enabled') == 'on',
                  use_global_schedule=form.get('use_global_schedule') == 'on')
     chosen = set(form.getlist('tag_ids'))
@@ -648,9 +652,11 @@ async def save_project(request: Request):
         crawl_profile = str(f.get('crawl_profile',site_safety.profile(pid) if existing else 'gentle'))
         if crawl_profile not in site_safety.PROFILES:
             raise ValueError('Bitte ein gültiges Prüftempo wählen.')
-        input_config=browser_mode.validate({'mode':str(f.get('browser_mode',browser_mode.get(existing)['mode'] if existing else 'standard')),
-                                            'entry_url':str(f.get('browser_entry_url',browser_mode.get(existing)['entry_url'] if existing else ''))},
-                                           {'domains':domains})
+        previous_input = browser_mode.get(existing) if existing else browser_mode.DEFAULT
+        input_config=browser_mode.validate({'mode':str(f.get('browser_mode',previous_input['mode'])),
+                                            'entry_url':str(f.get('browser_entry_url',previous_input['entry_url'])),
+                                            'flow':str(f.get('browser_flow',previous_input.get('flow','')))},
+                                           {'domains':domains,'url':url})
         use_global = int(f.get('use_global_schedule') == 'on') if 'schedule_mode' in f or 'use_global_schedule' in f else int(existing.get('use_global_schedule', 0) if existing else 0)
         saved_schedule = existing.get('schedule_config', '{}') if existing else '{}'
         if use_global:
@@ -688,7 +694,7 @@ async def save_project(request: Request):
         if not enabled or (existing and existing['url'] != url):
             retry_jobs.cancel_project(pid, connection=c)
         site_safety.save_profile(pid,crawl_profile,c)
-        browser_mode.save({'id':pid,'domains':domains},input_config,c)
+        browser_mode.save({'id':pid,'domains':domains,'url':url},input_config,c)
     if f.get('icon_action')=='clear': execute('DELETE FROM state WHERE key=?',(project_icons.KEY+pid,))
     elif icon: project_icons.save(pid,icon)
     elif existing and existing['url']!=url:
