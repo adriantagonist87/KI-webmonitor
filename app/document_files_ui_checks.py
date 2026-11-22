@@ -448,7 +448,7 @@ class GlobalFilesUI(unittest.TestCase):
         target.write_text('{broken record', encoding='utf-8')
         self.assertEqual(self.client.get('/documents/' + self.b_repeat).status_code, 200)
 
-    def test_17_examples_use_hash_only_files_and_preserve_html_article_analysis(self):
+    def test_17_examples_use_hash_only_files_and_report_new_article_headlines(self):
         from prompt_examples import EXAMPLES, FILE_CHECK
         for example in EXAMPLES:
             with self.subTest(example=example['title']):
@@ -457,8 +457,10 @@ class GlobalFilesUI(unittest.TestCase):
                                  'Vergleiche extrahierte Texte', 'Textvergleich eingeschränkt'):
                     self.assertNotIn(obsolete, example['prompt'])
         iww = next(e for e in EXAMPLES if e['url'] == 'https://www.iww.de/pbp/archiv')
-        self.assertIn('Öffne anschließend alle Artikel', iww['prompt'])
-        self.assertIn('kurzer fachlicher Absatz', iww['prompt'])
+        import article_headlines
+        self.assertTrue(article_headlines.enabled(iww['prompt']))
+        self.assertIn('verlinkte Überschrift', iww['prompt'])
+        self.assertIn('Keine neuen Artikel erkannt.', iww['prompt'])
         custom = BeautifulSoup(self.client.get('/projects/new').text, 'html.parser')
         self.assertIn('ausschließlich per SHA-256', custom.select_one('textarea[name=prompt]').get_text())
 

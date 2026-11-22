@@ -116,7 +116,12 @@ class Enhancements(unittest.TestCase):
   self.assertEqual(model['projects']['new']['category'],'notice')
   soup=BeautifulSoup(html,'html.parser')
   self.assertEqual([row['data-project-id'] for row in soup.select('[data-category=unchanged]')],['quiet'])
-  for value in ('Fehler','Ungeprüft','fehlgeschlagen','Im Berichtszeitraum nicht geprüft'):
+  gaps=soup.find('strong',string='Tage ohne erfolgreiche Prüfung').parent
+  self.assertIn('Fehler · 05.11.2026',gaps.get_text(' ',strip=True))
+  self.assertIn('Fehler · 05.11.2026',text)
+  gaps.decompose()
+  self.assertNotIn('Fehler',soup.get_text())
+  for value in ('Ungeprüft','fehlgeschlagen','Im Berichtszeitraum nicht geprüft'):
    self.assertNotIn(value,text+html)
 
  def test_13_mail_injection_escaped_and_no_tracking_images(self):
@@ -170,11 +175,13 @@ class Enhancements(unittest.TestCase):
 
  def test_20_collection_mail_renders_linked_entries_instead_of_raw_json_diff(self):
   data=list(self.mail_data())
-  evidence={'text_diff':'RAW_JSON_DIFF_CANARY','collection':{'added':[{'title':'DIN VDE 0100-999:2026-10','url':'https://change.example/new'}],'updated':[{'before':{'date':'2026-09'},'after':{'date':'2026-10'}}]}}
+  evidence={'text_diff':'RAW_JSON_DIFF_CANARY','collection':{'added':[{'title':'DIN VDE 0100-999:2026-10','url':'https://change.example/new'}],'updated':[{'before':{'title':'Norm B','date':'2026-09'},'after':{'title':'Norm B','date':'2026-10'}}]}}
   data[2][0]['evidence']=json.dumps(evidence)
   text,html=mails.compose(*data);soup=BeautifulSoup(html,'html.parser')
-  self.assertIn('1 neue und 1 aktualisierte Einträge erkannt.',html)
-  self.assertNotIn('RAW_JSON_DIFF_CANARY',text+html);self.assertNotIn('2026-09',text+html)
+  for report in (text,soup.get_text(' ',strip=True)):
+   self.assertIn('DIN VDE 0100-999:2026-10 · Neu im Katalog',report)
+   self.assertIn('Katalogeintrag geändert · Norm B · Ausgabe 2026-09 → 2026-10',report)
+  self.assertNotIn('RAW_JSON_DIFF_CANARY',text+html)
   self.assertIsNotNone(soup.find('a',href='https://change.example'))
   self.assertEqual(len(soup.select('[data-project-id="change"][data-category="changed"]')),2)
 

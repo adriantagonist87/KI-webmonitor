@@ -152,7 +152,13 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(model['counts']['sources'],3);self.assertEqual(set(model['projects']),{'public','quiet','private'})
     def test_10_global_report_excludes_notice_and_failure_rows(self):
         bundle=email_reports.render(self.model())
-        for value in ('ADMIN-HINT-CANARY','ADMIN-NOTICE-PROJECT','ADMIN-FAILED-PROJECT','Hinweise'):
+        soup=BeautifulSoup(bundle['html'],'html.parser')
+        gaps=soup.find('strong',string='Tage ohne erfolgreiche Prüfung').parent
+        self.assertIn('ADMIN-FAILED-PROJECT',gaps.get_text())
+        gaps.decompose()
+        self.assertNotIn('ADMIN-FAILED-PROJECT',soup.get_text())
+        self.assertNotIn('ADMIN-FAILED-PROJECT',bundle['text'].split('Tage ohne erfolgreiche Prüfung')[0])
+        for value in ('ADMIN-HINT-CANARY','ADMIN-NOTICE-PROJECT','Hinweise'):
             self.assertNotIn(value,bundle['html']+bundle['text'])
         self.assertIn('Neue fachliche Veröffentlichung',bundle['html'])
         self.assertIn('Keine Änderungen',bundle['text'])
