@@ -1,4 +1,5 @@
 """Resolve the trusted Docker service to an IP accepted by Chromium DevTools."""
+import asyncio
 import ipaddress
 import socket
 from urllib.parse import urlsplit, urlunsplit
@@ -13,3 +14,13 @@ def resolve(value):
     if address.version != 4 or not address.is_private or address.is_loopback or address.is_link_local:
         raise ValueError('Browserdienst muss im privaten Docker-Netz liegen.')
     return urlunsplit((url.scheme, str(address)+':9223', url.path, '', ''))
+
+async def resolve_for_connection(value):
+    """Retry a temporary Docker DNS failure once before opening the browser."""
+    try:
+        return resolve(value)
+    except socket.gaierror as error:
+        if error.errno != socket.EAI_AGAIN:
+            raise
+        await asyncio.sleep(2)
+        return resolve(value)

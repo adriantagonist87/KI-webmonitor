@@ -155,6 +155,16 @@ def markdown(text):
     return re.sub(r'([\\\x60*_{}\[\]<>])', r'\\\1', text)
 
 
+def current_versions(releases):
+    latest = {}
+    for release in releases:
+        slug = release['url'].rstrip('/').rsplit('/', 1)[-1]
+        product = re.sub(r'-v?\d.*$', '', slug[11:])
+        latest.setdefault(product, release)
+    return [f"[{markdown(r['title'])}]({r['url']}) · {r['updated'].astimezone(store.TZ):%d.%m.%Y}"
+            for r in latest.values()]
+
+
 async def monitor(project, rid, llm, model, redact):
     url = project['url']
     releases = await fetch()
@@ -167,6 +177,8 @@ async def monitor(project, rid, llm, model, redact):
     added = [release for release in releases if release['url'] not in seen] if prior else []
     summary = ([] if added else ['Keine neue öffentliche Version erkannt.' if prior
                                 else 'Ausgangsstand erfasst. Die drei jüngsten öffentlichen Einträge:'])
+    if prior and not added:
+        summary.extend(current_versions(releases))
     analyzed = []
     for release in (added if prior else releases[:3]):
         store.event(rid, 'Öffentlicher Obsidian-Eintrag wird ins Deutsche übersetzt.')

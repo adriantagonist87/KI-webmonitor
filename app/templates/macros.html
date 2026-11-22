@@ -11,7 +11,7 @@
 
 {% macro change_findings(findings, title, section_id) %}
 {% if findings %}<section class="card" id="{{section_id}}" data-relevant-findings><h2>{{title}} <span class="count">{{findings|length}}</span></h2><ul class="report">
-{% for finding in findings %}<li data-finding-id="{{finding.id}}"><p>{{finding.reason}}</p><p class="source">{% if finding.href %}<a href="{{finding.href}}" target="_blank" rel="noreferrer noopener">Quelle</a>{% else %}{{finding.url}}{% endif %} · <time datetime="{{finding.time}}">{{finding.time|localtime}}</time> · <a href="/runs/{{finding.run_id}}">Prüfung öffnen</a></p></li>{% endfor %}
+{% for finding in findings %}<li data-finding-id="{{finding.id}}">{% for detail in finding.details %}<p>{{detail}}</p>{% endfor %}<p class="source">{% if finding.href %}<a href="{{finding.href}}" target="_blank" rel="noreferrer noopener">Quelle</a>{% else %}{{finding.url}}{% endif %} · <time datetime="{{finding.time}}">{{finding.time|localtime}}</time> · <a href="/runs/{{finding.run_id}}">Prüfung öffnen</a></p></li>{% endfor %}
 </ul>{{caller() if caller is defined else ''}}</section>{% endif %}
 {% endmacro %}
 

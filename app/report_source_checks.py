@@ -142,7 +142,7 @@ class ReportSourceTests(unittest.TestCase):
         self.assertIn('Relevante Änderungen (1)',text)
         self.assertIn('Originalquelle · '+SOURCE,text)
         self.assertNotIn(DOCUMENT,text+html)
-        self.assertIn('Eine bereitgestellte Datei wurde geändert.',html)
+        self.assertIn('Neue Dateifassung · document.pdf',html)
         self.assertNotIn('Hinweis · Datei geändert',html)
         self.assertNotIn('SHA-256',html)
 

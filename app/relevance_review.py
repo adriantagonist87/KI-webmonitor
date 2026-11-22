@@ -11,6 +11,7 @@ import copy
 import json
 import re
 
+import document_relinks
 import change_review
 import store
 
@@ -27,6 +28,7 @@ SYSTEM_PROMPT = '''Du bewertest als letzte Prüfstufe die fachliche Relevanz tat
 Ein anderer Text- oder Dateihash allein beweist keine fachliche Neuerung. Entscheide für jede change_id genau einmal anhand des Projektauftrags und der vollständigen übergebenen Differenz: relevant, irrelevant oder uncertain. Eine neue Publikation, ein neuer fachlicher Link, eine neue Dokumentfassung sowie eine einzelne geänderte fachliche Ziffer, Frist, Datums-, Ausgaben-, Auflagen- oder Statusangabe können relevant sein. Sprachfassungen, Entwurf und endgültige Ausgabe auseinanderhalten. Auch gemischte Änderungen dürfen nicht pauschal ausgeblendet werden.
 Irrelevant ist nur eine vollständig als fachfremd oder bedeutungsgleich belegte Änderung im konkreten Auftrag, etwa Werbung, persönliche Historie, reine Navigation, Kauf-/Preisangaben bei ausgeschlossener Preisüberwachung oder eine zweifelsfrei unveränderte Sammlung in anderer Anordnung. Keine festen fachlichen Ausschlussregeln erfinden. Bei Unsicherheit, gemischten ungeklärten Unterschieden, unvollständigen Belegen oder abgeschnittener Evidenz uncertain verwenden. Das Verschwinden einer Karte aus einem Karussellausschnitt oder einer begrenzten Übersicht beweist weder Rücknahme noch Entfernen einer Publikation; fehlende Erfassungsabdeckung ist Unsicherheit. Dateihashwechsel bei gleichem Text kann Bilder und Darstellung betreffen: ohne Nachweis keine reine Metadatenänderung behaupten.
 Für relevant und irrelevant gib ein kurzes wörtliches evidence_quote aus technical_proof an. Kopiere dafür bevorzugt genau einen der kurzen, einzeiligen Auszüge aus proof_quotes. Diese sind bereits unveränderte Teilstrings des technischen Belegs. Rekonstruiere kein JSON, entferne oder ergänze keine Backslashes und baue keinen mehrzeiligen Diffblock nach. Für irrelevant ist ein mindestens zehn Zeichen langes Zitat zwingend und die gesamte Differenz muss vollständig vorliegen. Das Zitat allein ersetzt niemals die Prüfung der übrigen Differenz. Eine URL in links_added oder links_removed ist ein zulässiges wörtliches Belegzitat. Für uncertain darf evidence_quote leer sein. reason erklärt den belegten Bezug zum Auftrag knapp in Deutsch, ohne eine Artikelanalyse oder neue Fakten zu erfinden. Frühere Modellbewertungen sind keine Beweise.
+reason wird dem Benutzer als Änderungsmeldung angezeigt. Beginne bei benannten Publikationen mit der exakten beobachteten Bezeichnung und dem Titel der betroffenen Norm, Richtlinie oder Unterlage. Beschreibe danach die konkrete Änderung und gegebenenfalls ihren Status, etwa „in Vorbereitung“. Nenne bei mehreren betroffenen Publikationen deren Bezeichnungen. Allgemeine Aussagen wie „ein neuer Katalogeintrag wurde hinzugefügt“ ohne den Namen der Publikation genügen nicht. Übernimm nur Bezeichnungen aus den Belegen und stelle eine angekündigte Ausgabe nicht als bereits veröffentlicht dar.
 Antworte ausschließlich durch einen einzigen Aufruf von record_change_assessments mit allen change_ids dieses Batches, jeweils genau einmal. reason: 15 bis 1000 Zeichen; evidence_quote: höchstens 1200 Zeichen. Keine anderen Werkzeuge, keine Markdown-Antwort.'''
 
 REVIEW_TOOL = {
@@ -285,7 +287,14 @@ async def review_run(project, run_id, llm, model):
                             'ORDER BY detected,id', (run_id, project['id']))
     result = {'reviewed': 0, 'count': len(candidates), 'uncertain': 0, 'errors': []}
     remaining = []
+    mixed_relinks = []
     for row in candidates:
+        comparison = document_relinks.compare(row, project.get('prompt') or '')
+        if comparison and comparison['complete'] and document_relinks.review(row, comparison):
+            result['reviewed'] += 1
+            continue
+        if comparison:
+            mixed_relinks.append((row, comparison))
         if _verified_deterministic(row):
             result['reviewed'] += 1
         elif any(value['kind']=='document' for value in store.rows('SELECT kind FROM snapshots WHERE id IN (?,?) AND project_id=?',
@@ -297,12 +306,16 @@ async def review_run(project, run_id, llm, model):
         else:
             remaining.append(row)
     if not remaining:
+        for row, comparison in mixed_relinks:
+            document_relinks.review(row, comparison)
         return result
     if not isinstance(model, str) or not model.strip():
         result['uncertain'] += len(remaining)
         for offset in range(0, len(remaining), BATCH_SIZE):
             _unavailable(remaining[offset:offset + BATCH_SIZE], '', 'ModelNotConfigured')
         result['errors'].append('Abschließende Relevanzbewertung ohne konfiguriertes Modell nicht möglich.')
+        for row, comparison in mixed_relinks:
+            document_relinks.review(row, comparison)
         return result
     task = project.get('prompt', '')
     if not isinstance(task, str):
@@ -350,4 +363,6 @@ async def review_run(project, run_id, llm, model):
             _unavailable(batch, model, failure)
             result['errors'].append('Abschließende Relevanzbewertung für ' + str(len(batch))
                                     + ' Änderungen nicht abgeschlossen (' + failure + ').')
+    for row, comparison in mixed_relinks:
+        document_relinks.review(row, comparison)
     return result

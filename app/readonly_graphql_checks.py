@@ -60,6 +60,26 @@ class ReadonlyGraphQLTests(unittest.TestCase):
         self.assertTrue(self.permits(FakeRequest(page), page))
         self.assertTrue(self.permits(FakeRequest(page, resource_type='xhr'), page))
 
+    def test_storefront_bootstrap_reads_promo_campaigns_only_as_get_context(self):
+        page = FakePage()
+        query = CONTEXT_QUERY.replace('heroSlides { id title }',
+                                      'heroSlides { id title } promoCampaigns { id }')
+        allowed = FakeRequest(page,post_data_buffer=body(query,operationName='getContext'))
+        self.assertTrue(self.permits(allowed,page))
+        self.assertFalse(_readonly_payload(body(query.replace('getContext','other'),operationName='other')))
+        self.assertFalse(_readonly_payload(body(query.replace('query','mutation',1),operationName='getContext')))
+        self.assertFalse(_readonly_payload(body(query.replace('branches','unobservedField'),operationName='getContext')))
+
+    def test_category_listing_is_readonly(self):
+        url = 'https://shop.vds.de/de/kategorie/brandschutz/elektrische-anlagen'
+        page = FakePage()
+        page.main_frame.url = url
+        query = 'query getPublicationListByCategory { publicationsByCategory { slugName title state } }'
+        self.assertTrue(self.permits(FakeRequest(page, post_data_buffer=body(
+            query, operationName='getPublicationListByCategory')), page, url))
+        self.assertFalse(self.permits(FakeRequest(page, post_data_buffer=body(
+            query.replace('query', 'mutation', 1))), page, url))
+
     def test_02_mutations_subscriptions_and_multiple_operations_rejected(self):
         queries = [
             'mutation getContext { basket { id } }',

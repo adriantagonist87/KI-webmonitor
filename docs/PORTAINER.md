@@ -13,7 +13,7 @@ benötigt Linux amd64 und Docker Standalone.
 | --- | --- |
 | Name | `ki-webmonitor-test` |
 | Repository URL | `https://github.com/adriantagonist87/KI-webmonitor.git` |
-| Repository reference | `refs/tags/v1.5.19` |
+| Repository reference | `refs/tags/v1.5.20` |
 | Compose path für Zugriff im LAN | `portainer-lan-stack.yaml` |
 | Compose path für Zugriff per SSH-Tunnel | `portainer-stack.yaml` |
 
@@ -22,7 +22,7 @@ Unter **Environment variables** eintragen:
 
 ```dotenv
 IMAGE_PREFIX=ghcr.io/adriantagonist87/ai-webmonitor
-VERSION=1.5.19
+VERSION=1.5.20
 KIWM_ADMIN_USERNAME=
 KIWM_ADMIN_PASSWORD=
 ```
@@ -106,7 +106,7 @@ beispielsweise setzen:
 
 ```dotenv
 IMAGE_PREFIX=ghcr.io/OWNER/REPOSITORY
-VERSION=1.5.19
+VERSION=1.5.20
 ```
 
 Der Stack verwendet dann `${IMAGE_PREFIX}-app`, `-browser`, `-proxy`, `-ingress` und `-page-reader`.

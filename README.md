@@ -74,7 +74,7 @@ Das **Globale Dateiverzeichnis** bietet Suche und Sortierung über Projekte hinw
 
 ## Benachrichtigungen und Wochenberichte
 
-- **Telegram** meldet relevante Änderungen und Prüfprobleme. Die Automatik lässt sich global oder je Projekt steuern. Die Auswertung behält Absätze und Listen und verweist auf ihre Quellen.
+- **Telegram** meldet bis zu drei relevante Änderungen als kurze Stichpunkte. Prüfprobleme erscheinen als Statuszeile, Details stehen in der App. Die Automatik lässt sich global oder je Projekt steuern.
 - **E-Mail** liefert einen HTML-Bericht mit Textalternative. Unter **SMTP-Mailserver** lassen sich die Uhrzeit in `Europe/Berlin`, der Berichtszeitraum in Stunden oder Tagen und die Häufigkeit einstellen. Möglich sind tägliche, werktägliche, wöchentliche und monatliche Berichte sowie Stundenintervalle. Gespeicherte Einstellungen für SMTP und Telegram haben Vorrang vor den Stack-Vorgaben.
 - **Bericht und Verteiler** zeigen relevante Änderungen und eine Übersicht der Quellen mit und ohne Änderungen. Pro geänderter Quelle führt ein Originalquellenlink zur Webseite mit dem Eintrag. Die Quellennamen verlinken die überwachten Websites. Empfängerberichte lassen sich nach Projekten oder Tags eingrenzen. Die Adminansicht bietet Vorschauen und ein Versandarchiv.
 

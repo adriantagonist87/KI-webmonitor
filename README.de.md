@@ -50,7 +50,7 @@ Platzhalter. [Portainer und Releases](docs/PORTAINER.md)
 
 | Variable | Standard / Wirkung |
 | --- | --- |
-| `VERSION` | `1.5.19`, gemeinsame Version der fünf Images |
+| `VERSION` | `1.5.20`, gemeinsame Version der fünf Images |
 | `WEB_PORT` | `8765`, geschützter Zugang zur Anwendung |
 | `BROWSER_PORT` | `8766`, geschützter Zugang zum grafischen Brave |
 | `KIWM_OMLX_URL` | Optional: Adresse des lokalen KI-Servers einschließlich Port |
@@ -112,9 +112,15 @@ HTML-Artikel und sichtbare Webseiteninhalte kann die KI weiterhin auswerten.
 Öffentliche GitHub-Projekte können mit `https://github.com/OWNER/REPO/releases`
 überwacht werden. Der erste Lauf merkt sich vorhandene stabile Versionen als
 Ausgangsstand. Spätere Läufe melden jeden neuen stabilen Versions-Tag einmal.
-Entwürfe und Vorabversionen werden ausgefiltert. Die lokale KI fasst belegte
-neue Funktionen aus den Release Notes zusammen. Beim Eintragen eigener erlaubter
-Hostnamen sind `github.com` und `api.github.com` erforderlich.
+Entwürfe und Vorabversionen werden ausgefiltert. Die lokale KI nennt die belegten
+neuen Features. Bei reinen Fehlerkorrekturen steht im Bericht „nur Bugfixes“.
+Beim Eintragen eigener erlaubter Hostnamen sind `github.com` und `api.github.com` erforderlich.
+
+Für andere Quellen kann der Projektauftrag eine eigene Meldung für einen vollständig
+geprüften, unveränderten Bestand enthalten. Dafür eine eigene Zeile einfügen,
+etwa `Kurzmeldung bei vollständigem unverändertem Bestand: Keine neuen oder geänderten Vertragsunterlagen.`
+Der Platzhalter `{Dateizahl}` übernimmt die Anzahl geprüfter Dateien. Bei einer
+Ersterfassung, fehlenden Quellen oder offenen Vergleichen erscheint ein eigener Befund.
 
 Die [DKE-Arbeitsergebnisse](https://www.dke.de/de/normen-standards/arbeitsergebnisse#aetable)
 werden über die öffentlichen Tabellenfragmente für nationale Normen geprüft.

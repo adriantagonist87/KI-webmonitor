@@ -44,7 +44,11 @@ from document_metadata import extract_document_metadata, compact_document_metada
 import project_icons
 from document_types import DOC_EXT, DOC_MEDIA, document_suffix as original_document_suffix, HTMLDocumentError
 import email_reports
+import reader_summary
+import article_headlines
 import collection_index
+import vds_catalog
+import vds_category
 import retention
 import retry_jobs
 import browser_mode
@@ -314,20 +318,24 @@ def summary_evidence(evidence):
     for c in evidence.get('changes',[]):
         if c['kind'] in ('Neue Seite','Neues Dokument'): continue
         if document_change(c):c=document_change_view(c)
-        item=dict(c);detail=json.loads(c['evidence']) if isinstance(c.get('evidence'),str) else dict(c.get('evidence',{}))
+        item={key:value for key,value in c.items() if key not in ('project_id','previous_id','current_id')}
+        detail=json.loads(c['evidence']) if isinstance(c.get('evidence'),str) else dict(c.get('evidence',{}))
         if 'document_metadata_comparison' in detail:
             detail['document_metadata_comparison']=compact_metadata_comparison(detail['document_metadata_comparison'])
         if len(detail.get('text_diff',''))>limit:
             detail['text_diff']=detail['text_diff'][:limit];detail['diff_truncated']=True
-        for key in ('links_added','links_removed'):
-            if len(detail.get(key,[]))>10:
-                detail[key]=detail[key][:10];detail[key+'_truncated']=True
         item['evidence']=detail;changes.append(item)
         if change_priority(c['kind'],detail)=='attention':
+            catalog_changes = vds_catalog.list_changes(c, detail)
+            if catalog_changes:
+                detail['vds_catalog_changes'] = site_privacy.redact_payload(catalog_changes)
             assessment=detail.get('ai_assessment') or {}
             relevant.append({'change_id':c.get('id'),'url':c['url'],'kind':c['kind'],
                              'reason':assessment.get('reason') or detail.get('note') or '',
                              'evidence_quote':assessment.get('evidence_quote') or ''})
+        for key in ('links_added','links_removed'):
+            if len(detail.get(key,[]))>10:
+                detail[key]=detail[key][:10];detail[key+'_truncated']=True
     result['changes']=changes
     result['relevant_changes']=relevant
     result['relevant_change_count']=len(relevant)
@@ -348,8 +356,28 @@ def source_coverage(observations, start_url):
 
 
 async def create_summary(evidence, model):
+    verified = reader_summary.verified_summary(evidence)
+    if verified is not None and not unknown_report_links(verified, evidence):
+        return verified
+    coverage = reader_summary.coverage_note(evidence)
+    pending = reader_summary.open_comparisons(evidence)
+    prepared = summary_evidence(evidence)
+    if (coverage or pending) and reader_summary.PREFIX in evidence.get('task', '') and not prepared['relevant_change_count'] and not prepared['first_captures']:
+        notices = [coverage] if coverage else []
+        if pending:
+            notices.append('Änderung festgestellt. Die fachliche Bedeutung ist noch offen.')
+            notices.extend(reader_summary._source('Betroffene Quelle', url) for url in pending)
+        return '\n\n'.join(notices)
     messages=[{'role':'system','content':REPORT_PROMPT+'\nAktueller Pruefzeitpunkt: '+datetime.now(TZ).isoformat()},
-              {'role':'user','content':json.dumps(summary_evidence(evidence),ensure_ascii=False)}]
+              {'role':'user','content':json.dumps(prepared,ensure_ascii=False)}]
+    documents = reader_summary.mixed_document_lines(evidence)
+    if documents and not unknown_report_links('\n\n'.join(documents), evidence):
+        messages[0]['content'] += ('\nDie Anwendung zeigt die archivierten Dateinamen aus document_relinks bereits im '
+            'Berichtseinstieg. Beschreibe nur weitere belegte Änderungen, beispielsweise einen geänderten oder '
+            'entfernten Hinweis auf der Seite. Trenne eine Änderung der Fundstelle von einer Änderung des Regelwerks. '
+            'Wenn es über die bereits genannten Dateien hinaus keinen belegten Befund gibt, antworte exakt KEIN WEITERER BEFUND.')
+    else:
+        documents = []
     for attempt in range(2):
         response=await llm(messages,model,max_tokens=6000,temperature=0)
         choice=response['choices'][0]
@@ -357,7 +385,13 @@ async def create_summary(evidence, model):
             answer=redact_text(content(response))
             if answer.strip():
                 unsupported=unknown_report_links(answer,evidence)
-                if not unsupported:return answer
+                if not unsupported:
+                    notes = [coverage] if coverage else []
+                    if pending:
+                        notes.append('Bei mindestens einer Änderung ist die fachliche Bedeutung noch offen.')
+                    if documents and answer.strip() == 'KEIN WEITERER BEFUND':
+                        return '\n\n'.join([*notes, *documents])
+                    return '\n\n'.join([*notes, *documents, answer])
                 messages.append({'role':'user','content':'Der Bericht enthält Quellenlinks, die in den Belegen nicht vorkommen. Erstelle ihn vollständig neu. Übernimm die exakten URL-Zeichenfolgen aus observations[].metadata.links jeweils passend zum Linktitel oder die URL der gelesenen Quelle. Erzeuge niemals Artikelpfade aus Überschriften. Behalte das verlangte Ausgabeformat bei. Unbelegte Links der verworfenen Fassung: '+json.dumps(unsupported[:12],ensure_ascii=False)})
                 continue
         messages.append({'role':'user','content':'Die vorige Generierung war leer oder abgeschnitten. Erstelle den Bericht vollstaendig neu, spare doppelte Listen und Nebenbemerkungen. Beachte das ausdruecklich verlangte Ausgabeformat und die gewuenschte Sichtbarkeit. Verlangte Originalauszuege vollstaendig beibehalten; nicht eigenmaechtig kuerzen oder in Klappbereiche verschieben. Ohne besondere Formatvorgabe Hauptbefund maximal 120 Woerter. Gib nur den fertigen Bericht aus.'})
@@ -826,7 +860,7 @@ async def monitor(project, rid):
     scopes=json.loads(old['value']) if old else {}
     visual=[];collection_pending={};navigation_selected=None;collection_results=[];last_source_is_document=False
     async with async_playwright() as pw:
-        browser=await pw.chromium.connect_over_cdp(browser_endpoint.resolve(BROWSER_CDP_URL))
+        browser=await pw.chromium.connect_over_cdp(await browser_endpoint.resolve_for_connection(BROWSER_CDP_URL))
         ctx=browser.contexts[0]; old_pages=list(ctx.pages)
         visual_config=browser_mode.get(project)
         macro=navigation_macros.active(project)
@@ -1123,6 +1157,9 @@ async def monitor(project, rid):
                     compact=[]
                     for change in rows('SELECT id,kind,evidence FROM changes WHERE run_id=? AND url=?',(rid,target)):
                         detail=json.loads(change['evidence'])
+                        if change['kind']=='Datei geändert' and label and label != target and not detail.get('document_title'):
+                            detail['document_title']=reader_summary._file_title(target,{target:{'title':label}})
+                            execute('UPDATE changes SET evidence=? WHERE id=?',(json.dumps(detail,ensure_ascii=False),change['id']))
                         compact.append({'id':change['id'],'kind':change['kind'],'note':detail.get('note','')[:300],
                                         'text_diff_excerpt':detail.get('text_diff','')[:600],'diff_truncated':len(detail.get('text_diff',''))>600,
                                         **({'document_metadata_comparison':compact_metadata_comparison(detail['document_metadata_comparison'])}
@@ -1274,6 +1311,9 @@ async def monitor(project, rid):
                 raise ValueError('Unbekanntes Werkzeug')
 
             event(rid,'Startseite wird geöffnet und erfasst.')
+            if vds_category.matches(project['url']) and not (broker or visual_mode):
+                await vds_category.monitor(page,project,rid)
+                return
             if vde_flow:
                 if not broker or not broker.proved:
                     raise RuntimeError('Der VDE-Ablauf benötigt einen bestätigten Webseitenzugang.')
@@ -1320,7 +1360,7 @@ async def monitor(project, rid):
             relevance=await review_run_relevance(project,rid,llm,s['analysis_model'])
             errors.extend('Relevanzbewertung nicht abgeschlossen: '+str(error) for error in relevance['errors'])
             event(rid,f"Abschließende Relevanzbewertung: {relevance['reviewed']} geprüft, {relevance['uncertain']} ungeklärt.")
-            changes=rows('SELECT url,kind,evidence FROM changes WHERE run_id=?',(rid,))
+            changes=rows('SELECT id,project_id,previous_id,current_id,url,kind,evidence FROM changes WHERE run_id=?',(rid,))
             observations=[]
             for r in rows('SELECT id,url,kind,text FROM snapshots WHERE run_id=?',(rid,)):
                 item=snapshot_captures.get(r['id'],{})
@@ -1330,6 +1370,9 @@ async def monitor(project, rid):
                 observations.append({'url':r['url'],'kind':r['kind'],'snapshot_id':r['id'],'scope':item.get('scope'),
                     'text':'' if r['kind']=='document' else r['text'][:12000],'metadata':meta,
                     'prior_snapshot_available':item.get('comparison_compatible',bool(previous_in_scope(project['id'],rid,r['url'],item.get('scope') if item.get('section_identity') else None)[0]))})
+            if article_headlines.enabled(project['prompt']) and agent.get('complete') is True and not errors:
+                article_headlines.record_additions(project,rid,observations)
+                changes=rows('SELECT * FROM changes WHERE run_id=? ORDER BY detected,id',(rid,))
             evidence={'task':project['prompt'],'observations':observations,'changes':changes,'vision':visual,'errors':errors,
                       'agent':{k:v for k,v in agent.items() if k!='actions'},'checked_at':datetime.now(TZ).isoformat(),'current_date':datetime.now(TZ).strftime('%Y-%m-%d'),
                       'context_limits':'Textauszuege je Quelle maximal 12000 Zeichen; vollstaendige Texte im Archiv. Fehlende Detailpruefungen ausdruecklich benennen.',
@@ -1341,7 +1384,9 @@ async def monitor(project, rid):
             save_final_evidence(rid,evidence)
             try: summary=await create_summary(evidence,s['analysis_model'])
             except Exception as exc:
-                errors.append('KI-Bericht fehlgeschlagen: '+type(exc).__name__); summary='Quellen archiviert; KI-Bericht nicht verfuegbar.'
+                errors.append('KI-Bericht fehlgeschlagen: '+type(exc).__name__)
+                proved = reader_summary.mixed_document_lines(evidence)
+                summary = '\n\n'.join([*proved, 'Die Quellen wurden archiviert. Die KI-Auswertung konnte nicht abgeschlossen werden.'])
             status='partial' if errors else 'success'
             retry_jobs.finish_run(rid,status,error='\n'.join(errors) or None,summary=summary,agent_result=redact_text(json.dumps(agent,ensure_ascii=False))[:20000])
             for key,value in collection_pending.items():execute('INSERT OR REPLACE INTO state VALUES(?,?)',(key,json.dumps(value,ensure_ascii=False)))
@@ -1388,7 +1433,7 @@ async def run_job(project, rid):
         except Exception as e:
             # No raw provider exceptions or HTTP request data in logs.
             error = browser_errors.describe(e) or (redact_text(str(e)[:500]) if isinstance(e, (RuntimeError,site_access.AccessError)) else type(e).__name__)
-            retry_jobs.finish_run(rid,'failed',error=error)
+            retry_jobs.finish_run(rid,'failed',error=error,summary='Prüfung fehlgeschlagen. '+error)
             event(rid, 'Prüfung fehlgeschlagen: ' + error)
             if browser_errors.describe(e):
                 event(rid,'Browser-Fehlerstelle: '+browser_errors.location(e))
@@ -1400,21 +1445,46 @@ async def run_job(project, rid):
 
 REPORT_LOCK=asyncio.Lock()
 
-async def make_report(test=False,distribution_id=None,*,occurrence=None):
+async def make_report(test=False,distribution_id=None,*,occurrence=None,request_id=None):
     import report_batches,report_mail,distributions
-    if distribution_id and (not test or not distributions.get(distribution_id)):raise ValueError('Verteiler nicht gefunden.')
+    manual_send = request_id is not None
+    if manual_send and (test or occurrence is not None or not distribution_id or not re.fullmatch(r'[0-9a-f]{32}',request_id)):
+        raise ValueError('Wähle einen Verteiler und öffne die Versandmaske bei Bedarf erneut.')
+    if not manual_send and distribution_id and (not test or not distributions.get(distribution_id)):raise ValueError('Verteiler nicht gefunden.')
     async with REPORT_LOCK:
         plan=report_schedule.current()
         if occurrence and (occurrence['schedule'],occurrence['due']) != (plan['schedule'],plan['due']):
             return None
         end=datetime.now(timezone.utc);start=report_schedule.window_start(end,plan['period'])
-        key='test-'+uid() if test else report_schedule.occurrence_key(occurrence,end)
+        key='manual-'+request_id if manual_send else 'test-'+uid() if test else report_schedule.occurrence_key(occurrence,end)
         report=one('SELECT * FROM reports WHERE period_key=?',(key,))
+        if manual_send and report:
+            if report['distribution_id']!=distribution_id or report['mail_status']=='purged':
+                raise ValueError('Diese Versandmaske wurde bereits verwendet. Bitte öffne sie erneut.')
+            return report['id']
+        target = distributions.get(distribution_id) if manual_send else None
+        if manual_send:
+            if not target or target['deleted_at']:
+                raise ValueError('Der ausgewählte Verteiler ist nicht mehr verfügbar.')
+            if not settings().get('smtp_enabled'):
+                raise ValueError('Aktiviere den E-Mail-Versand in den SMTP-Einstellungen.')
+            allowed_ids = distributions.allowed_projects(target)
         if not report:
-            exclude='' if test else ' AND c.id NOT IN (SELECT change_id FROM report_changes)'
-            changes=rows("SELECT c.*,p.name FROM changes c JOIN projects p ON p.id=c.project_id JOIN runs r ON r.id=c.run_id WHERE c.detected>=? AND c.detected<=? AND r.status IN ('success','partial') AND c.kind<>'Nichtredaktionelle Seitenänderung' AND COALESCE(json_extract(c.evidence,'$.ai_assessment.relevance'),'uncertain')<>'irrelevant' AND NOT (c.previous_id IS NULL AND c.kind IN ('Neue Seite','Neues Dokument'))"+exclude+' ORDER BY c.detected',(start.isoformat(),end.isoformat()))
+            # Overlapping issues each cover their full window. The archive
+            # links below record the first inclusion, never a delivery cutoff.
+            changes=rows("""SELECT c.*,r.summary AS run_summary
+                FROM changes c JOIN runs r ON r.id=c.run_id
+                WHERE c.detected>=? AND c.detected<=? AND r.status IN ('success','partial')
+                AND c.kind<>'Nichtredaktionelle Seitenänderung'
+                AND COALESCE(json_extract(c.evidence,'$.ai_assessment.relevance'),'uncertain')<>'irrelevant'
+                AND NOT (c.previous_id IS NULL AND c.kind IN ('Neue Seite','Neues Dokument'))
+                ORDER BY c.detected DESC,c.id""",(start.isoformat(),end.isoformat()))
             runs=rows('SELECT r.*,p.name FROM runs r JOIN projects p ON p.id=r.project_id WHERE started>=? AND started<=? ORDER BY r.started',(start.isoformat(),end.isoformat()))
             projects=rows("SELECT p.*,(SELECT count(*) FROM runs WHERE project_id=p.id AND status='success') AS successes FROM projects p ORDER BY name")
+            if manual_send:
+                projects = [p for p in projects if p['id'] in allowed_ids]
+                runs = [r for r in runs if r['project_id'] in allowed_ids]
+                changes = [c for c in changes if c['project_id'] in allowed_ids]
             for p in projects:p['baseline']=p['successes']<=1
             proof_runs=sorted({change['run_id'] for change in changes})
             previous_snapshots=sorted({change['previous_id'] for change in changes if change['previous_id']})
@@ -1426,16 +1496,19 @@ async def make_report(test=False,distribution_id=None,*,occurrence=None):
                 (json.dumps(proof_runs),json.dumps(previous_snapshots)))
             model=email_reports.build_model(projects,runs,changes,rows('SELECT * FROM tags ORDER BY key'),start.isoformat(),end.isoformat(),source_snapshots=source_snapshots)
             model=await email_reports.compact_headlines(model,llm,settings().get('analysis_model'))
-            rid=uid();items=report_batches.records(rid,key,now(),model,{p['id']:project_icons.get(p['id']) for p in projects},test,distribution_id)
+            rid=uid();items=report_batches.records(rid,key,now(),model,{p['id']:project_icons.get(p['id']) for p in projects},test,distribution_id,manual_distribution=target)
             with db() as c:
                 c.execute('BEGIN IMMEDIATE')
                 existing=c.execute('SELECT * FROM reports WHERE period_key=?',(key,)).fetchone()
                 if existing:rid=existing['id']
                 else:
                     report_batches.insert(c,items)
-                    if not test:
+                    if not test and not manual_send:
                         for change in changes:c.execute('INSERT OR IGNORE INTO report_changes VALUES(?,?)',(change['id'],rid))
             report=one('SELECT * FROM reports WHERE id=?',(rid,))
+        if manual_send:
+            # The regular SMTP outbox handles every recipient independently.
+            return report['id']
         report_mail.recover()
         ids=[r['id'] for r in rows('SELECT id FROM reports WHERE id=? OR parent_id=? ORDER BY audience,recipient_email',(report['id'],report['id']))]
         await report_batches.dispatch(ids[:20],httpx.AsyncClient)

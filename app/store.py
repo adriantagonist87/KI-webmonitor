@@ -147,22 +147,38 @@ def init():
 def event(run_id, message):
     execute('INSERT INTO events(run_id,time,message) VALUES(?,?,?)', (run_id, now(), message[:2000]))
 
-def manual():
-    r = one("SELECT value FROM state WHERE key='manual'")
+def manual(connection=None):
+    query = "SELECT value FROM state WHERE key='manual'"
+    r = connection.execute(query).fetchone() if connection is not None else one(query)
     return bool(r and r['value'] == '1')
 
 def enqueue(project_id, origin='manual'):
     with db() as c:
         c.execute('BEGIN IMMEDIATE')
-        if origin == 'scheduled':
-            project=c.execute('SELECT enabled FROM projects WHERE id=?',(project_id,)).fetchone()
-            if not project or not project['enabled']:return None
-        if origin == 'retry':
-            return None  # Automatic retries can only be claimed from their durable plan.
-        import retry_jobs
-        retry_jobs.cancel_project(project_id, connection=c)
-        if c.execute("SELECT 1 FROM runs WHERE project_id=? AND status IN ('queued','running')", (project_id,)).fetchone():
+        return _enqueue(c, project_id, origin)
+
+def _enqueue(c, project_id, origin):
+    if origin == 'scheduled':
+        project=c.execute('SELECT enabled FROM projects WHERE id=?',(project_id,)).fetchone()
+        if not project or not project['enabled']:return None
+    if origin == 'retry':
+        return None  # Automatic retries can only be claimed from their durable plan.
+    import retry_jobs
+    retry_jobs.cancel_project(project_id, connection=c)
+    if c.execute("SELECT 1 FROM runs WHERE project_id=? AND status IN ('queued','running')", (project_id,)).fetchone():
+        return None
+    rid = uid()
+    c.execute('INSERT INTO runs(id,project_id,started,status,origin) VALUES(?,?,?,?,?)', (rid, project_id, now(), 'queued', origin))
+    return rid
+
+def enqueue_all():
+    with db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        if manual(c):
             return None
-        rid = uid()
-        c.execute('INSERT INTO runs(id,project_id,started,status,origin) VALUES(?,?,?,?,?)', (rid, project_id, now(), 'queued', origin))
-        return rid
+        projects = c.execute("""SELECT p.id FROM projects p WHERE NOT EXISTS
+            (SELECT 1 FROM runs r WHERE r.project_id=p.id AND r.status IN ('queued','running'))
+            ORDER BY p.name COLLATE NOCASE,p.id""").fetchall()
+        for project in projects:
+            _enqueue(c, project['id'], 'manual')
+        return len(projects)

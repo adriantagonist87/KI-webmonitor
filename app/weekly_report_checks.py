@@ -180,6 +180,40 @@ class WeeklyReport(unittest.TestCase):
     def test_20_local_model_failure_keeps_report_working(self):
         m=model();fn=AsyncMock(side_effect=TimeoutError())
         result=asyncio.run(reports.compact_headlines(m,fn,'local-model'));self.assertEqual(result['projects'],m['projects']);self.assertEqual(result['headline_status'],'fallback-existing-assessments')
+
+    def test_named_catalog_entries_and_documents_survive_distribution(self):
+        data = list(demo())
+        designations = [f'DIN VDE 0100-{700+n}:2026-08' for n in range(14)]
+        data[2].append({'project_id':'1','id':'catalog','kind':'Inhalt geändert','evidence':{
+            'ai_assessment':{'relevance':'relevant','reason':'Die Differenz fügt Katalogeinträge hinzu.'},
+            'collection':{'added':[{'title':title,'text':f'VDE Entwurf (gültig)\n{title}\nElektroanlagen\nAusgabedatum:\n2026-08'}
+                                   for title in designations]},
+        }})
+        document = data[0][8]['url'] + 'download.pdf'
+        data[2].extend([
+            {'project_id':'8','id':'file','run_id':'file-run','kind':'Datei geändert','url':document,
+             'run_summary':f'### [Besondere Vertragsbedingungen zum Mindeststundenentgelt]({document})',
+             'evidence':{'comparison_mode':'sha256'}},
+            {'project_id':'8','id':'renamed','kind':'Inhalt geändert; Links geändert','evidence':{
+                'text_diff':'--- vorher\n+++ nachher\n@@ -1 +1 @@\n-3. Vertragsbedingungen zur Frauenförderung\n+3. Vertragsbedingungen zur Frauenförderung Bau',
+                'links_added':[document],'links_removed':[data[0][8]['url']+'alt.pdf'],
+            }},
+        ])
+        global_report = model(data)
+        distribution, _ = reports.for_distribution(
+            global_report,{'tag_ids':[],'project_ids':['1','8'],'alias':'Arbeit'})
+        for view in (global_report,distribution):
+            report = reports.render(view)
+            for part in (report['text'], report['html']):
+                for designation in designations:
+                    self.assertIn(designation,part)
+                self.assertIn('Elektroanlagen',part)
+                self.assertIn('Besondere Vertragsbedingungen zum Mindeststundenentgelt',part)
+                self.assertIn('Titel „3. Vertragsbedingungen zur Frauenförderung“ um „Bau“ ergänzt.',part)
+                self.assertNotIn('Die Differenz fügt',part)
+                self.assertNotIn(document,part)
+                self.assertNotIn(ORIGIN,part)
+
     def test_21_no_flex_grid_javascript_media_or_external_images(self):
         html=reports.render(model())['html']
         for forbidden in ('<script','@media','display:flex','display:grid','RAW_JSON'):self.assertNotIn(forbidden,html)

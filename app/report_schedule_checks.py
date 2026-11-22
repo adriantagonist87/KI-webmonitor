@@ -1,5 +1,6 @@
 """SMTP recurrence, coverage and migration using isolated settings and archives."""
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -10,6 +11,7 @@ from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 
 import engine
+import email_reports
 import report_batches
 import report_schedule
 import store
@@ -128,3 +130,40 @@ class ReportScheduleChecks(unittest.TestCase):
         self.assertEqual({r['id'] for r in reports},{first,second,preview})
         for report in reports:
             self.assertEqual(datetime.fromisoformat(report['end'])-datetime.fromisoformat(report['start']),timedelta(hours=30))
+
+    def test_moving_report_time_keeps_every_change_within_the_lookback(self):
+        store.execute("""INSERT INTO projects(id,name,url,prompt,domains,cron,next_due,created)
+                       VALUES('project','Quelle','https://example.test/','','example.test','0 8 * * 1',?,?)""",
+                      (store.now(),store.now()))
+        for ident, stamp, message in (
+            ('expired', '2026-11-09T09:00:00', 'Fällt um 14 Uhr aus dem Zeitraum.'),
+            ('overlap', '2026-11-13T09:00:00', 'Bereits um 08 Uhr gemeldet.'),
+            ('new', '2026-11-16T11:00:00', 'Seit 08 Uhr neu hinzugekommen.'),
+        ):
+            detected = at(stamp).isoformat()
+            store.execute("INSERT INTO runs(id,project_id,started,finished,status,origin) VALUES(?,'project',?,?,'success','test')",
+                          (ident,detected,detected))
+            evidence = json.dumps({'ai_assessment':{'summary':message,'relevance':'relevant'}})
+            store.execute("INSERT INTO changes VALUES(?,'project',?,'https://example.test/','Inhalt geändert',?,NULL,?,?,?)",
+                          (ident,ident,detected,ident,evidence,ident))
+        morning = at('2026-11-16T07:00:00')
+        afternoon = at('2026-11-16T13:00:00')
+        self.configure({'mode':'weekly','time':'08:00'})
+        first_plan = report_schedule.current(morning-timedelta(seconds=1),persist=True)
+        with patch.object(report_batches,'dispatch',AsyncMock()), patch.object(engine,'datetime') as clock:
+            clock.now.return_value = morning
+            first = asyncio.run(engine.make_report(occurrence=first_plan))
+            report_schedule.advance(first_plan,morning)
+            self.configure({'mode':'weekly','time':'14:00'})
+            second_plan = report_schedule.current(morning,persist=True)
+            clock.now.return_value = afternoon
+            second = asyncio.run(engine.make_report(occurrence=second_plan))
+            self.assertEqual(asyncio.run(engine.make_report(occurrence=second_plan)),second)
+        self.assertNotEqual(first,second)
+        self.assertEqual(store.one("SELECT report_id FROM report_changes WHERE change_id='overlap'")['report_id'],first)
+        report = store.one('SELECT * FROM reports WHERE id=?',(second,))
+        self.assertEqual(at('2026-11-09T13:00:00').isoformat(),report['start'])
+        for part in (report['content'],email_reports.saved_html(report)):
+            self.assertIn('Bereits um 08 Uhr gemeldet.',part)
+            self.assertIn('Seit 08 Uhr neu hinzugekommen.',part)
+            self.assertNotIn('Fällt um 14 Uhr aus dem Zeitraum.',part)

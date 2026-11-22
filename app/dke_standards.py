@@ -198,7 +198,7 @@ def record_run(project, rid, month, tables):
         elif added:
             summary.append('### Neu erfasste Ausgaben\n\n' + '\n'.join(map(line, added)))
         else:
-            summary.append('Keine neue Norm oder Vornorm erkannt.')
+            summary.insert(0, 'Seit der letzten Prüfung ist keine Norm oder Vornorm hinzugekommen.')
         if monthly:
             summary.append('<details>\n<summary>Alle Einträge im aktuellen Monat</summary>\n\n'
                            + '\n'.join(map(line, monthly.values())) + '\n\n</details>')

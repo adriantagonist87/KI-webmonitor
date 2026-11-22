@@ -70,6 +70,9 @@
     }));
     sync();
 
+    const runAllDialog = document.getElementById('run-all-dialog');
+    document.querySelector('[data-run-all-open]')?.addEventListener('click', () => runAllDialog.showModal());
+
     const maintenanceTable = document.querySelector('[data-maintenance-sortable]');
     if (maintenanceTable) {
       const collator = new Intl.Collator('de', {numeric: true, sensitivity: 'base'});
@@ -299,6 +302,7 @@
 
 
     const search = document.querySelector('[data-project-search]');
+    const clearSearch = document.querySelector('[data-project-search-clear]');
     const tagFilter = document.querySelector('[data-tag-filter]');
     const tagChoices = [...document.querySelectorAll('[data-tag-choice]')];
     const filters = [...document.querySelectorAll('[data-filter]')];
@@ -358,6 +362,7 @@
     };
     const matchesStatus = (card, key) => key === 'all' || (key === 'attention' && card.dataset.attention === '1') || (key === 'notices' && card.dataset.notices === '1') || (key === 'active' && card.dataset.enabled === '1') || (key === 'paused' && card.dataset.enabled === '0') || (key === 'error' && card.dataset.error === '1');
     const updateProjects = () => {
+      if (clearSearch) clearSearch.hidden = !search.value;
       const words = (search?.value || '').trim().toLocaleLowerCase('de').split(/\s+/).filter(Boolean);
       const tag = tagFilter?.value || '';
       const base = projects.filter(card => {
@@ -381,6 +386,11 @@
       sortProjects(selected === 'all' && !tag && !words.length);
     };
     search?.addEventListener('input', updateProjects);
+    clearSearch?.addEventListener('click', () => {
+      search.value = '';
+      updateProjects();
+      search.focus({preventScroll:true});
+    });
     tagFilter?.addEventListener('change', updateProjects);
     tagChoices.forEach(button => button.addEventListener('click', () => {
       if (tagFilter) tagFilter.value = tagFilter.value === button.dataset.tagChoice ? '' : button.dataset.tagChoice;
@@ -394,7 +404,7 @@
       selected = selected === button.dataset.filter ? 'all' : button.dataset.filter;
       updateProjects();
     }));
-    if (projects.length) updateProjects();
+    if (search || projects.length) updateProjects();
     document.querySelectorAll('[data-review-form]').forEach(form => form.addEventListener('submit', async event => {
       if (!window.fetch || !window.AbortController) return;
       event.preventDefault();

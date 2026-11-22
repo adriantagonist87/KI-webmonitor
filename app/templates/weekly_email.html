@@ -54,6 +54,11 @@
         <td valign="top" style="padding:8px 10px;border-top:1px solid #d3dde9;border-right:1px solid #d3dde9">{{ source_name(project) }}</td>
         <td valign="top" style="padding:8px 10px;border-top:1px solid #d3dde9;font-size:13px;line-height:18px;word-wrap:break-word">
           <strong>{{ project.message }}</strong>
+          {% if project.details %}
+          <ul style="margin:4px 0 6px;padding-left:16px">
+          {% for detail in project.details %}<li style="margin-bottom:4px">{{ detail }}</li>{% endfor %}
+          </ul>
+          {% endif %}
           {% if project.prestandards %}<div style="margin-top:3px;color:#526580">{{ project.prestandards }}</div>{% endif %}
           {% if project.source_page %}<div style="margin-top:3px;font-size:12px">{{ mail_link(project.source_page,'Originalquelle') }}</div>{% endif %}
         </td>
@@ -62,6 +67,7 @@
     </tbody>
   </table>
   {% endif %}
+  {% if gaps %}<p><strong>Tage ohne erfolgreiche Prüfung</strong><br>{% for name,dates in gaps %}{{ name }} · {{ dates }}<br>{% endfor %}</p>{% endif %}
   <table data-source-overview role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;border:1px solid #d3dde9;border-collapse:collapse">
     <tr><td bgcolor="#245673" style="padding:7px 10px;color:#ffffff"><h2 style="margin:0;font-size:16px;line-height:21px">Alle überwachten Quellen</h2></td></tr>
     {% for category,label,count in overview %}

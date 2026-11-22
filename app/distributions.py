@@ -102,7 +102,8 @@ def allowed_projects(distribution):
 def grant_current(report):
     if report.get('audience','admin')!='distribution':return True
     d=get(report['distribution_id'])
-    if not d or not d['enabled'] or d['deleted_at'] or report['recipient_email'].casefold() not in {x.casefold() for x in d['emails']}:return False
+    if not d or d['deleted_at'] or report['recipient_email'].casefold() not in {x.casefold() for x in d['emails']}:return False
+    if not d['enabled'] and not report.get('period_key','').startswith('manual-'):return False
     try:snapshot=json.loads(report['selection_snapshot'])
     except (ValueError,TypeError):return False
     if snapshot.get('selected_project_ids')!=d['project_ids'] or snapshot.get('selected_tag_ids')!=d['tag_ids']:return False

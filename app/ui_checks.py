@@ -380,4 +380,55 @@ class UI(unittest.TestCase):
   page=BeautifulSoup(result.text,'html.parser')
   self.assertEqual([r['data-finding-id'] for r in page.select('[data-relevant-findings] [data-finding-id]')],[new_id])
 
+ def test_17_catalog_findings_name_each_changed_norm_from_existing_evidence(self):
+  pid=self.history_project('named-catalog-findings');rid='named-catalog-run'
+  self.history_run(pid,rid)
+  reason='Ein neuer Katalogeintrag wurde hinzugefügt. GENERIC-CATALOG-CANARY'
+  cid=self.reasoned_change(pid,rid,reason)
+  designation='DIN VDE 0100-710 (VDE 0100-710):2026-12'
+  topic='Errichten von Niederspannungsanlagen'
+  part='Teil 7-710: Anforderungen für Betriebsstätten, Räume und Anlagen besonderer Art – Medizinisch genutzte Bereiche'
+  long_title='DIN EN IEC 99999:2026-12 '+('Vollständige beobachtete Bezeichnung '*10).strip()
+  evidence={'ai_assessment':{'relevance':'relevant','reason':reason},'collection':{
+   'added':[{'title':designation,'date':'2026-12','text':f'Norm (in Vorbereitung)\n{designation}\n{topic}\n{part}\nAusgabedatum:\n2026-12\nErscheinungsdatum:\n2026-11-20'},
+            {'title':long_title,'date':'2026-12','text':long_title+'\nWeiterer Normtitel'}],
+   'updated':[],'entries':[{'title':'UNVERÄNDERTE-NORM-CANARY'}]}}
+  stored=json.dumps(evidence)
+  execute('UPDATE changes SET evidence=? WHERE id=?',(stored,cid))
+  for route in ('/projects/'+pid,'/runs/'+rid):
+   page=BeautifulSoup(self.client.get(route).text,'html.parser')
+   finding=page.select_one('[data-relevant-findings] [data-finding-id="'+cid+'"]')
+   self.assertIsNotNone(finding)
+   paragraphs=finding.find_all('p',recursive=False)
+   self.assertEqual(len(paragraphs),3)
+   for name in (designation,topic,part,'Norm (in Vorbereitung)',long_title):
+    self.assertIn(name,finding.get_text())
+   self.assertNotIn('GENERIC-CATALOG-CANARY',finding.get_text())
+   self.assertNotIn('UNVERÄNDERTE-NORM-CANARY',finding.get_text())
+   self.assertIsNotNone(finding.select_one('a[href="/runs/'+rid+'"]'))
+  self.assertEqual(one('SELECT evidence FROM changes WHERE id=?',(cid,))['evidence'],stored)
+  self.assertIsNone(one('SELECT * FROM change_reviews WHERE change_id=?',(cid,)))
+
+ def test_18_updated_catalog_findings_escape_titles_and_legacy_entries_keep_reason(self):
+  pid=self.history_project('updated-catalog-findings');rid='updated-catalog-run'
+  self.history_run(pid,rid)
+  reason='Die Normausgabe wurde im beobachteten Katalog aktualisiert.'
+  cid=self.reasoned_change(pid,rid,reason)
+  before={'title':'DIN VDE 0100-710:2026-11','date':'2026-11'}
+  after={'title':'DIN VDE 0100-710:2026-12 <img src=x onerror="alert(1)">','date':'2026-12'}
+  evidence={'ai_assessment':{'relevance':'relevant','reason':reason},'collection':{
+   'added':[None,{}],'updated':[None,{}, {'before':before,'after':after}]}}
+  execute('UPDATE changes SET evidence=? WHERE id=?',(json.dumps(evidence),cid))
+  for route in ('/projects/'+pid,'/runs/'+rid):
+   page=BeautifulSoup(self.client.get(route).text,'html.parser')
+   finding=page.select_one('[data-relevant-findings] [data-finding-id="'+cid+'"]')
+   for text in ('Katalogeintrag geändert',after['title'],before['title'],'Ausgabe 2026-11 → 2026-12'):
+    self.assertIn(text,finding.get_text())
+   self.assertEqual(finding.select('img,script,[onerror]'),[])
+  for collection in (None,[],{}, {'added':[None,{}],'updated':[{}, {'after':None}]}):
+   evidence['collection']=collection
+   execute('UPDATE changes SET evidence=? WHERE id=?',(json.dumps(evidence),cid))
+   page=BeautifulSoup(self.client.get('/projects/'+pid).text,'html.parser')
+   self.assertIn(reason,page.select_one('[data-relevant-findings]').get_text())
+
 if __name__=='__main__':unittest.main(verbosity=2)

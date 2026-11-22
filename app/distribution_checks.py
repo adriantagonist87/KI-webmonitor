@@ -285,4 +285,72 @@ class DistributionTests(unittest.TestCase):
             payload=json.loads(messages[1]['content']);self.assertEqual(len(payload),1)
             if payload[0]['id']=='public':self.assertNotIn('PRIVATE-',json.dumps(messages));self.assertNotIn('ADMIN-HINT-',json.dumps(messages))
 
+    def test_manual_distribution_report_sends_only_selected_recipients_once(self):
+        did=self.create(alias='Mitarbeiter IBM',enabled=0,tag_ids=[],project_ids=['public'])
+        other=self.create(alias='Anderer Verteiler',emails=['outside@example.test'])
+        store.save_json(store.CONFIG,{'smtp_enabled':True,'report_period':{'amount':3,'unit':'days'}})
+        for pid in ('public','private'):
+            for index in range(2):
+                run=f'{pid}{index}'
+                store.execute("INSERT INTO runs(id,project_id,started,finished,status,origin) VALUES(?,?,?,?,'success','test')",
+                              (run,pid,store.now(),store.now()))
+        schedule=engine.report_schedule.current(persist=True)
+        form=BeautifulSoup(self.client.get('/reports').text,'html.parser').select_one('form[action="/reports/send"]')
+        self.assertIn('Mitarbeiter IBM',form.get_text(' ',strip=True))
+        values={'csrf':form.select_one('[name=csrf]')['value'],'send_token':form.select_one('[name=send_token]')['value'],
+                'distribution_id':did}
+        self.assertEqual(self.client.post(form['action'],data={**values,'csrf':'bad'}).status_code,403)
+        response=self.client.post(form['action'],data=values,follow_redirects=False)
+        self.assertEqual(response.status_code,303)
+        page=response.headers['location']
+        again=self.client.post(form['action'],data=values,follow_redirects=False)
+        self.assertEqual(again.headers['location'],page)
+        clash=self.client.post(form['action'],data={**values,'distribution_id':other},follow_redirects=False)
+        self.assertEqual(clash.status_code,400)
+        parent=store.one("SELECT * FROM reports WHERE parent_id IS NULL")
+        self.assertEqual(parent['mail_status'],'preview')
+        self.assertEqual(datetime.fromisoformat(parent['end'])-datetime.fromisoformat(parent['start']),timedelta(days=3))
+        self.assertEqual(engine.report_schedule.current(),schedule)
+        self.assertEqual(store.rows('SELECT * FROM report_changes'),[])
+        children=store.rows('SELECT * FROM reports WHERE parent_id=?',(parent['id'],))
+        self.assertEqual({child['distribution_id'] for child in children},{did})
+        self.assertEqual(len(children),2)
+        self.assertEqual(set(report_mail.due_ids()),{child['id'] for child in children})
+        self.assertIn('Sofortbericht · Mitarbeiter IBM',self.client.get(page).text)
+        self.assertNotIn('Sofortbericht · Mitarbeiter IBM',self.client.get('/reports?regular=1').text)
+
+        async def send_batch():
+            import httpx
+            requests=[]
+            def receive(request):
+                self.assertEqual(str(request.url),'http://gateway:8000/smtp')
+                requests.append(json.loads(request.content))
+                return httpx.Response(200,json={'mode':'production'})
+            factory=lambda **kw: httpx.AsyncClient(transport=httpx.MockTransport(receive),**kw)
+            await report_batches.dispatch(report_mail.due_ids(),factory)
+            await report_batches.dispatch(report_mail.due_ids(),factory)
+            return requests
+        messages=asyncio.run(send_batch())
+        self.assertCountEqual([m['recipient'] for m in messages],['one@example.test','two@example.test'])
+        for message in messages:
+            self.assertFalse(message['test'])
+            self.assertIn('Mitarbeiter IBM',message['subject'])
+            self.assertNotIn('[TEST]',message['subject'])
+            self.assertIn('Öffentliche Änderung',message['content'])
+            self.assertNotIn('PRIVATE-PROJECT-CANARY',message['content']+message['html'])
+        self.assertIn('Versandt',self.client.get(page).text)
+
+    def test_manual_distribution_report_rejects_unavailable_smtp_or_list(self):
+        did=self.create()
+        values={'csrf':self.csrf,'send_token':store.uid(),'distribution_id':did}
+        response=self.client.post('/reports/send',data=values)
+        self.assertEqual(response.status_code,400)
+        self.assertIn('SMTP-Einstellungen',response.text)
+        store.save_json(store.CONFIG,{'smtp_enabled':True})
+        lists.remove(did)
+        response=self.client.post('/reports/send',data=values)
+        self.assertEqual(response.status_code,400)
+        self.assertIn('nicht mehr verfügbar',response.text)
+        self.assertEqual(store.rows('SELECT * FROM reports'),[])
+
 if __name__=='__main__':unittest.main(verbosity=2)

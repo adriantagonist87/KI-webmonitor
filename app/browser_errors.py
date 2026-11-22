@@ -1,10 +1,13 @@
 """Describe browser failures without recording URLs, credentials or provider bodies."""
+import socket
 import traceback
 from pathlib import Path
 from playwright.async_api import Error as BrowserError, TimeoutError as BrowserTimeout
 
 
 def describe(error):
+    if isinstance(error, socket.gaierror):
+        return 'Die Namensauflösung ist fehlgeschlagen. Die Quelle konnte nicht geprüft werden.'
     if not isinstance(error, BrowserError):
         return None
     message = str(error).lower()

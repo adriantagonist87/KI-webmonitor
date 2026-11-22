@@ -2,15 +2,26 @@
 import json
 import store,email_reports,distributions,report_mail
 
-def records(parent_id,key,created,model,icons,test=False,only_distribution=None):
-    bundle=email_reports.render(model,icons);email_reports.save(parent_id,bundle)
+def records(parent_id,key,created,model,icons,test=False,only_distribution=None,*,manual_distribution=None):
+    if manual_distribution:
+        filtered,selection=email_reports.for_distribution(model,manual_distribution)
+        bundle=email_reports.render(filtered,icons)
+        targets=[manual_distribution]
+    else:
+        bundle=email_reports.render(model,icons)
+        targets=[distributions.get(only_distribution)] if only_distribution else [d for d in distributions.all_lists() if d['enabled']]
+    email_reports.save(parent_id,bundle)
     parent={'id':parent_id,'period_key':key,'created':created,'start':model['start'],'end':model['end'],'content':bundle['text'],'audience':'admin','parent_id':None,'distribution_id':None,'distribution_alias':None,'recipient_email':None,'selection_snapshot':'{}','mail_status':'pending'}
+    if manual_distribution:
+        parent.update(distribution_id=manual_distribution['id'],distribution_alias=manual_distribution['alias'],mail_status='preview')
     result=[parent]
-    targets=[distributions.get(only_distribution)] if only_distribution else [d for d in distributions.all_lists() if d['enabled']]
     for d in targets:
         if not d or d['deleted_at']:continue
-        filtered,selection=email_reports.for_distribution(model,d)
-        child_bundle=email_reports.render(filtered,icons)
+        if manual_distribution:
+            child_bundle=bundle
+        else:
+            filtered,selection=email_reports.for_distribution(model,d)
+            child_bundle=email_reports.render(filtered,icons)
         for recipient in d['emails']:
             rid=store.uid();email_reports.save(rid,child_bundle)
             state='skipped' if not filtered['counts']['sources'] else 'preview' if test and not d['enabled'] else 'pending'
@@ -24,7 +35,8 @@ def insert(connection,items):
     for item in items:
         keys=list(item)
         connection.execute('INSERT INTO reports('+','.join(keys)+') VALUES('+','.join('?' for _ in keys)+')',[item[k] for k in keys])
-        report_mail.event(connection,item['id'],item['mail_status'],'Gefilterter Empfängerbericht erstellt.' if item['audience']=='distribution' else 'Globaler Adminbericht erstellt.')
+        note='Gefilterter Empfängerbericht erstellt.' if item['audience']=='distribution' else 'Versandübersicht erstellt.' if item['period_key'].startswith('manual-') else 'Globaler Adminbericht erstellt.'
+        report_mail.event(connection,item['id'],item['mail_status'],note)
 
 async def dispatch(ids,client_factory):
     import httpx

@@ -33,7 +33,9 @@ def _link_metadata(anchor, url):
         for parent in list(anchor.parents)[:4]:
             if parent.name in ('html', 'body', 'main', '[document]'):
                 break
-            headings = parent.select('h2,h3,h4')
+            headings = parent.select('h2,h3,h4,h5,h6,[role="heading"]')
+            if not headings:
+                headings = parent.select('strong.title,b.title,p.title,span.title')
             urls = {urldefrag(urljoin(url, a['href']))[0] for a in parent.select('a[href]')
                     if _file_anchor(a,url)}
             if len(headings) == 1 and urls == {target}:

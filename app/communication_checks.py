@@ -116,16 +116,23 @@ class Communications(unittest.TestCase):
         for args in ({'changed':False},{'relevance':'irrelevant'},{'relevance':'uncertain'},{'baseline':True}):notifications.queue_run(self.run_record(**args))
         self.assertEqual(store.rows('SELECT * FROM notifications'),[])
 
-    def test_10_relevant_change_queued_once_with_primary_summary(self):
+    def test_10_relevant_file_change_queued_once_without_report_or_hash(self):
         rid=self.run_record();notifications.queue_run(rid);notifications.queue_run(rid)
         records=store.rows('SELECT * FROM notifications');self.assertEqual(len(records),1)
-        self.assertIn('42 Tage',records[0]['message']);self.assertNotIn('UNWICHTIGE DETAILS',records[0]['message'])
-        self.assertIn('SHA-256',records[0]['message']);self.assertNotIn(TOKEN,records[0]['message'])
-        self.assertIn('file.pdf',records[0]['message'])
+        message=records[0]['message']
+        self.assertIn('• Neue Dateifassung · file.pdf',message)
+        for value in ('42 Tage','UNWICHTIGE DETAILS','SHA-256',TOKEN):
+            self.assertNotIn(value,message)
 
     def test_11_failures_and_partial_send_without_changes(self):
         for status in ('failed','partial'):notifications.queue_run(self.run_record(status,False))
-        self.assertEqual(len(store.rows('SELECT * FROM notifications')),2)
+        messages=[row['message'] for row in store.rows('SELECT message FROM notifications')]
+        self.assertEqual(len(messages),2)
+        for status in ('Prüfung fehlgeschlagen','Prüfung unvollständig'):
+            self.assertTrue(any(status in message for message in messages))
+        for message in messages:
+            self.assertNotIn('Server nicht erreichbar',message)
+            self.assertNotIn('42 Tage',message)
 
     def test_12_old_runs_not_backfilled_by_initialization(self):
         self.run_record()
@@ -149,7 +156,7 @@ class Communications(unittest.TestCase):
         self.assertEqual(store.one('SELECT status FROM notifications')['status'],'sent');self.assertEqual(len(calls),1)
         self.assertEqual(calls[0].url.host,'api.telegram.org');self.assertIn(TOKEN,calls[0].url.path)
         payload=json.loads(calls[0].content)
-        self.assertEqual(payload['chat_id'],'12345');self.assertIn('42 Tage',payload['text']);self.assertNotIn('parse_mode',payload)
+        self.assertEqual(payload['chat_id'],'12345');self.assertIn('Neue Dateifassung · file.pdf',payload['text']);self.assertNotIn('parse_mode',payload)
         text = payload['text'].encode('utf-16-le')
         def label(entity):
             offset = entity['offset'] * 2
@@ -157,7 +164,7 @@ class Communications(unittest.TestCase):
         links = {label(e): e['url'] for e in payload['entities'] if e['type'] == 'text_link'}
         self.assertEqual(links, {'Quelle öffnen':'https://example.test/',
                                  'Auswertung im Webmonitor öffnen':'http://192.168.0.10:8765/runs/'+rid})
-        self.assertIn('▸ Änderung', [label(e) for e in payload['entities'] if e['type'] == 'bold'])
+        self.assertIn('KI-Webmonitor · Testprojekt 🧪', [label(e) for e in payload['entities'] if e['type'] == 'bold'])
         asyncio.run(notifications.dispatch_one());self.assertEqual(len(calls),1)
 
     def test_15_telegram_rate_limit_preserves_retry_after(self):
@@ -196,30 +203,112 @@ class Communications(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 self.assertEqual(telegram_message.with_source_link(telegram_message.compose(['Test'], invalid))[1], [])
 
-    def test_19b_catalog_preview_keeps_complete_entries_and_drops_technical_details(self):
+    def test_19b_partial_catalog_notification_keeps_the_complete_short_finding(self):
+        rid = self.run_record(status='partial',changed=False)
+        project = store.one('SELECT * FROM projects')
+        run = store.one('SELECT * FROM runs WHERE id=?', (rid,))
+        finding = ('Im Bereich Brandschutz erscheint die neue Publikation VdS 6159 : 2026-10 (01) '
+                   '„Lithium-Ionen-Akkus in handgeführten Geräten“ mit eigener Detail-URL; zugleich '
+                   'verschwindet die englische Fassung VdS 6023en aus der Startseitenliste.')
+        reason = finding + ' Beide sind fachliche Katalogänderungen im beauftragten Beobachtungsbereich.'
+        row = {'kind': 'Inhalt geändert; Links geändert', 'url': project['url']}
+        changes = [(row, {'ai_assessment': {'reason': reason}})]
+        text, _ = telegram_message.for_delivery(notifications.message(project, run, changes))
+        self.assertIn('• ' + finding + '\n\nPrüfung unvollständig', text)
+        self.assertNotIn('Beide sind', text)
+        self.assertNotIn('Server nicht erreichbar', text)
+        self.assertNotIn('KI-Auswertung', text)
+        self.assertNotIn('42 Tage', text)
+        self.assertLess(telegram_message.units(text), 400)
+
+    def test_19c_many_changes_show_three_findings_and_overflow_count(self):
         rid = self.run_record()
         project = store.one('SELECT * FROM projects')
         run = store.one('SELECT * FROM runs WHERE id=?', (rid,))
-        entries = [f'### [Norm 🧪 {n:02d}](https://example.test/normen/{n}?token=PRIVATE)\n\n'
-                   f'{"Ein neuer fachlicher Anwendungsbereich. " * 8}\n'
-                   f'*Ausgabe: 2026-{n:02d} · Erschienen: 2026-{n:02d}-01*' for n in range(1, 13)]
-        run['summary'] = ('Zwölf neue Normen.\n\n' + '\n\n'.join(entries)
-                          + '\n\n<details><summary>Technik</summary>UNWICHTIGE DETAILS</details>')
-        text, entities = telegram_message.for_delivery(notifications.message(project, run, notifications.relevant_changes(rid)))
-        shown = [line for line in text.splitlines() if line.startswith('▸ Norm')]
-        self.assertGreater(len(shown), 1)
-        self.assertLess(len(shown), len(entries))
-        self.assertEqual(text.count('\nAusgabe:'), len(shown))
-        self.assertIn('▸ Norm 🧪 01\nEin neuer', text)
-        self.assertIn('\n\nWeitere Details im vollständigen Bericht.', text)
-        self.assertNotIn('UNWICHTIGE DETAILS', text)
-        self.assertNotIn('PRIVATE', text)
-        self.assertLessEqual(telegram_message.units(text), 4096)
+        row = {'kind': 'Inhalt geändert', 'url': project['url']}
+        changes = [(row, {'ai_assessment': {'summary': f'Neue Ausgabe {index}'}}) for index in range(1, 6)]
+        text, _ = telegram_message.for_delivery(notifications.message(project, run, changes))
+        self.assertEqual(text.count('• '), 3)
+        self.assertIn('+ 2 weitere Änderungen in der Auswertung.', text)
+        self.assertNotIn('Neue Ausgabe 4', text)
+
+    def test_19d_removed_vds_title_comes_from_the_matching_archived_card(self):
+        rid = self.run_record(status='partial', changed=False)
+        url = 'https://shop.vds.de/'
+        removed = url + 'de/publikation/vds-6023en'
+        added = url + 'de/publikation/vds-6159'
+        title = 'Rooftop Photovoltaic Systems - Ways to minimise the risk of fire'
+        stamp = store.now()
+        archived = (
+            ('before', removed, 'VdS 6023en : 2026-05 (02)', title),
+            ('after', added, 'VdS 6159 : 2026-10 (01)', 'Lithium-Ionen-Akkus in handgeführten Geräten'),
+        )
+        for sid, target, number, name in archived:
+            path = f'artifacts/{sid}.html.txt'
+            (self.root / path).write_text(
+                f'<a href="{target}"><h5>{number}</h5><p>{name}</p></a>', encoding='utf-8')
+            store.execute('INSERT INTO snapshots VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                          (sid,rid,'project',url,'page',stamp,'hash','hash','text','[]',None,None,path))
+        row = {'url': url, 'project_id': 'project', 'kind': 'Links geändert',
+               'previous_id': 'before', 'current_id': 'after'}
+        evidence = {'links_removed': [removed], 'links_added': [added],
+                    'ai_assessment': {'relevance': 'relevant', 'reason': 'VdS 6023en verschwindet.'}}
+        run = store.one('SELECT * FROM runs WHERE id=?', (rid,))
+        message, _ = telegram_message.for_delivery(notifications.message(
+            {'name': 'VdS', 'url': url}, run, [(row, evidence)]))
+        self.assertIn(f'• Aus der Startseitenliste verschwunden · VdS 6023en : 2026-05 (02) „{title}“', message)
+        self.assertIn('• Neu gelistet · VdS 6159', message)
+        self.assertNotIn('zurückgezogen', message)
+        model = engine.summary_evidence({'changes': [{**row, 'evidence': evidence}]})
+        self.assertEqual(model['changes'][0]['evidence']['vds_catalog_changes'][0]['title'], title)
+        self.assertNotIn('vds_catalog_changes', evidence)
+        (self.root / 'artifacts/before.html.txt').unlink()
+        self.assertIn('VdS 6023en verschwindet.', notifications.message(
+            {'name': 'VdS', 'url': url}, run, [(row, evidence)]))
 
     def test_20_telegram_probe_checks_identity_chat_and_explicit_send(self):
         with patch.object(transport,'telegram_call',return_value={'id':1}) as call:
             transport.telegram_probe(False);self.assertEqual([x.args[0] for x in call.call_args_list],['getMe','getChat'])
             call.reset_mock();transport.telegram_probe(True);self.assertEqual(call.call_args_list[-1].args[0],'sendMessage')
+
+    def test_catalog_notification_names_entries_and_counts_publications(self):
+        row={'kind':'Inhalt geändert; Links geändert','url':'https://example.test/'}
+        records=[{'title':f'DIN VDE 0100-{700+n}:2026-12',
+                  'text':f'Norm (in Vorbereitung)\nDIN VDE 0100-{700+n}:2026-12\nMedizinisch genutzte Bereiche\nAusgabedatum:\n2026-12'}
+                 for n in range(14)]
+        evidence={'collection':{'added':records},'ai_assessment':{'reason':'Die Differenz fügt 14 fachlich relevante Einträge hinzu.'}}
+        text=notifications.message({'name':'VDE','url':row['url']},{'status':'success'},[(row,evidence)])
+        self.assertIn('DIN VDE 0100-700:2026-12',text)
+        self.assertIn('Medizinisch genutzte Bereiche',text)
+        self.assertIn('in Vorbereitung',text)
+        self.assertIn('+ 11 weitere Änderungen',text)
+        self.assertEqual(text.count('• '),3)
+        self.assertNotIn('Die Differenz',text)
+
+    def test_document_notification_uses_its_title_from_a_plain_report_link(self):
+        url='https://example.test/BVB_1234_long_filename.pdf'
+        title='Besondere Vertragsbedingungen zur Frauenförderung'
+        run={'id':'named-file','status':'success','summary':f'Neue Dateifassung · <a href="{url}">{title}</a>'}
+        row={'kind':'Datei geändert','url':url,'run_id':run['id']}
+        text=notifications.message({'name':'BIM','url':'https://example.test/'},run,[(row,{})])
+        self.assertIn('Neue Dateifassung · '+title,text)
+        self.assertNotIn('BVB_1234',text)
+
+    def test_release_notification_prefers_recorded_features_over_an_old_headline(self):
+        row={'kind':'Neue stabile Version','url':'https://github.com/example/project/releases/tag/v2'}
+        evidence={'release':{'tag':'v2'},'features':[{'text':'Die App zeigt den betroffenen Ordner bei einem Scanfehler.'}],
+                  'ai_assessment':{'summary':'Keine neuen Funktionen genannt.'}}
+        text=notifications.message({'name':'Software','url':row['url']},{'status':'success'},[(row,evidence)])
+        self.assertIn('v2 · Die App zeigt den betroffenen Ordner',text)
+        self.assertNotIn('Keine neuen Funktionen',text)
+
+    def test_long_catalog_subject_keeps_its_preparation_status(self):
+        title='DIN VDE 0100-710:2026-12'
+        row={'kind':'Inhalt geändert','url':'https://example.test/'}
+        evidence={'collection':{'added':[{'title':title,'text':f'Norm (in Vorbereitung)\n{title}\n'+('Medizinische Einrichtungen '*30)}]}}
+        text=notifications.message({'name':'VDE','url':row['url']},{'status':'success'},[(row,evidence)])
+        self.assertIn(title,text)
+        self.assertIn('Norm (in Vorbereitung)',text)
 
     def test_21_smtp_starttls_before_login(self):
         s={'smtp_host':'smtp.example.test','smtp_port':587,'smtp_user':'user','smtp_tls':'starttls'}

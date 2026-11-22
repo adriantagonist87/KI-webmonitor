@@ -97,6 +97,29 @@ class AutomationBackend(unittest.TestCase):
         old=store.one("SELECT * FROM projects WHERE id='paused'");raw=store.CONFIG.read_bytes()
         self.post();self.assertEqual(store.CONFIG.read_bytes(),raw);self.assertEqual(store.one("SELECT * FROM projects WHERE id='paused'"),old)
 
+    def test_bulk_run_requires_confirmation_and_respects_manual_mode(self):
+        path = '/projects/run-all'
+        self.assertEqual(self.client.post(path, data={'confirmed': '1'}).status_code, 403)
+        self.assertEqual(self.client.post(path, data={'csrf': self.csrf}).status_code, 400)
+        store.execute("UPDATE state SET value='1' WHERE key='manual'")
+        response = self.client.post(path, data={'csrf': self.csrf, 'confirmed': '1'})
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(store.rows("SELECT * FROM runs WHERE status='queued'"), [])
+
+    def test_bulk_run_includes_paused_and_skips_running_or_already_queued_projects(self):
+        old = store.rows('SELECT * FROM projects ORDER BY id')
+        running = store.enqueue('active')
+        self.assertTrue(retry_jobs.begin_attempt(running))
+        data = {'csrf': self.csrf, 'confirmed': '1'}
+        response = self.client.post('/projects/run-all', data=data, follow_redirects=False)
+        self.assertEqual(response.headers['location'], '/?notice=all_runs_queued')
+        repeated = self.client.post('/projects/run-all', data=data, follow_redirects=False)
+        self.assertEqual(repeated.headers['location'], '/?notice=no_runs_to_queue')
+        self.assertEqual(store.rows("SELECT project_id,status,origin FROM runs WHERE id<>? ORDER BY project_id", ('failed',)),
+                         [{'project_id': 'active', 'status': 'running', 'origin': 'manual'},
+                          {'project_id': 'paused', 'status': 'queued', 'origin': 'manual'}])
+        self.assertEqual(store.rows('SELECT * FROM projects ORDER BY id'), old)
+
 
 @unittest.skipUnless(os.environ.get('BROWSER_CDP_URL'),'Isolated QA browser required')
 class DashboardBrowser(unittest.IsolatedAsyncioTestCase):
@@ -129,6 +152,26 @@ class DashboardBrowser(unittest.IsolatedAsyncioTestCase):
 
     def active(self):return self.page.locator('[data-project-id=active]')
 
+    async def test_bulk_run_dialog_cancel_and_confirm(self):
+        await self.page.set_viewport_size({'width': 390, 'height': 850})
+        trigger = self.page.get_by_role('button', name='Alle Projekte aktualisieren')
+        dialog = self.page.get_by_role('dialog', name='Alle Projekte aktualisieren')
+        await trigger.click()
+        await dialog.wait_for()
+        self.assertIn('Dies führt zu hoher Auslastung der KI', await dialog.inner_text())
+        await dialog.get_by_role('button', name='Abbrechen').click()
+        await dialog.wait_for(state='hidden')
+        self.assertEqual(self.posts, [])
+        await trigger.click()
+        await self.page.keyboard.press('Escape')
+        await dialog.wait_for(state='hidden')
+        self.assertEqual(self.posts, [])
+        await trigger.click()
+        await dialog.get_by_role('button', name='OK', exact=True).click()
+        await self.page.get_by_text('Projektprüfungen wurden in die Warteschlange gestellt.').wait_for()
+        self.assertEqual(self.posts, ['/projects/run-all'])
+        self.assertEqual(len(store.rows("SELECT id FROM runs WHERE status='queued'")), 2)
+
     async def test_12_real_pause_resume_and_filter_counts_without_navigation(self):
         button=self.active().locator('.automation-toggle');url=self.page.url
         self.assertEqual(await button.locator('use').get_attribute('href'),'#i-play')
@@ -149,6 +192,30 @@ class DashboardBrowser(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('has-paused',await self.page.locator('[data-filter=paused]').get_attribute('class'))
         self.assertEqual(await self.page.locator('[data-filter=error] b').inner_text(),'1')
         self.assertIn('has-errors',await self.page.locator('[data-filter=error]').get_attribute('class'))
+
+    async def test_project_search_clear_preserves_filters_and_restores_results(self):
+        await self.page.set_viewport_size({'width': 390, 'height': 850})
+        search = self.page.get_by_role('searchbox', name='Projekte durchsuchen')
+        clear = self.page.get_by_role('button', name='Suche leeren', include_hidden=True)
+        paused = self.page.locator('[data-filter=paused]')
+        result_count = self.page.locator('[data-result-count]')
+        paused_project = self.page.locator('[data-project-id=paused]')
+        await paused.click()
+        self.assertTrue(await clear.is_hidden())
+        await search.fill('Dashboard')
+        self.assertTrue(await clear.is_visible())
+        self.assertEqual(await result_count.inner_text(), '0/2')
+        await clear.hover()
+        self.assertEqual(await clear.evaluate('button => getComputedStyle(button).backgroundColor'), 'rgba(0, 0, 0, 0)')
+        await clear.click()
+        self.assertEqual(await search.input_value(), '')
+        self.assertTrue(await search.evaluate('input => input === document.activeElement'))
+        self.assertTrue(await clear.is_hidden())
+        self.assertEqual(await paused.get_attribute('aria-pressed'), 'true')
+        self.assertEqual(await result_count.inner_text(), '1/2')
+        self.assertTrue(await paused_project.is_visible())
+        self.assertFalse(await self.active().is_visible())
+        self.assertEqual(self.posts, [])
 
     async def test_14_error_fades_once_per_second_and_stops_when_zero(self):
         button=self.page.locator('[data-filter=error]');self.assertIn('has-errors',await button.get_attribute('class'))

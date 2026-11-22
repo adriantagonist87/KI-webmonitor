@@ -38,7 +38,7 @@ def number_changed(evidence):
 
 
 def pending(project_id):
-    changes = rows('''SELECT c.*,r.finished FROM changes c
+    changes = rows('''SELECT c.*,r.finished,r.summary AS run_summary FROM changes c
         JOIN runs r ON r.id=c.run_id
         LEFT JOIN change_reviews v ON v.change_id=c.id
         WHERE c.project_id=? AND r.status IN ('success','partial')

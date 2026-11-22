@@ -8,13 +8,17 @@ from datetime import datetime,timedelta,timezone
 from urllib.parse import quote,urlsplit,unquote
 import httpx
 import attention
+import article_headlines
 import email_reports
 import lan_access
 import site_privacy
 import store
 import telegram_message
+import vds_catalog
 
 LOCK=asyncio.Lock()
+MAX_FINDINGS = 3
+FINDING_LIMIT = 260
 
 
 def initialize(c):
@@ -57,24 +61,62 @@ def report_url(run):
     return origin + '/runs/' + quote(rid, safe='') if origin and rid else None
 
 
+def change_text(row, evidence):
+    kind = row['kind']
+    if 'Datei' in kind or 'Dokument' in kind:
+        filename = compact(unquote(urlsplit(row['url']).path.rsplit('/', 1)[-1]), 110)
+        return (filename + ' · ' if filename else '') + compact(kind, FINDING_LIMIT)
+    assessment = evidence.get('ai_assessment') or {}
+    text = compact(assessment.get('summary') or assessment.get('reason') or evidence.get('note') or kind,
+                   FINDING_LIMIT)
+    if text.endswith(' …'):
+        sentence = re.match(r'.{100,}[.!?](?= [A-ZÄÖÜ])', text)
+        if sentence:
+            return sentence.group()
+    return text
+
+
+def change_findings(row,evidence,run,titles):
+    catalog = vds_catalog.list_changes(row,evidence)
+    if catalog:
+        findings=[]
+        for item in catalog:
+            label='Aus der Startseitenliste verschwunden' if item['state']=='removed' else 'Neu gelistet'
+            findings.append(redact(f'{label} · {item["number"]} „{item["title"]}“'))
+        if len(catalog)<len(evidence.get('links_added',[]))+len(evidence.get('links_removed',[])):
+            findings.append(change_text(row,evidence))
+        return findings
+    release=evidence.get('release') or {}
+    features=[f['text'] for f in evidence.get('features',[]) if isinstance(f,dict) and isinstance(f.get('text'),str)]
+    if release.get('tag') and features:
+        return [compact('Neue stabile Version '+release['tag']+' · '+features[0],340)]
+    source={**row,'run_id':row.get('run_id') or run.get('id'),'run_summary':run.get('summary')}
+    details=email_reports.specific_details(source,evidence,titles,catalog_limit=None)
+    findings=[]
+    for detail in details:
+        text=compact(detail,340)
+        status=re.search(r'(?:VDE )?(?:Norm|Entwurf|Anwendungsregel|Vornorm) \([^)]+\)',detail)
+        if status and status.group() not in text:
+            text=compact(detail,280)+' · '+redact(status.group())
+        findings.append(text)
+    return findings or [change_text(row,evidence)]
+
+
 def message(project,run,changes):
     lines=['KI-Webmonitor · '+compact(project['name'],180)]
+    articles = article_headlines.from_changes([row for row,_ in changes]) if article_headlines.enabled(project.get('prompt')) else None
+    if articles is not None:
+        lines.extend('• ' + redact(item['title']) for item in articles)
+    elif changes:
+        titles={}
+        findings=list(dict.fromkeys(
+            finding for row,evidence in changes for finding in change_findings(row,evidence,run,titles)))
+        lines.append('\n'.join('• ' + finding for finding in findings[:MAX_FINDINGS]))
+        extra = max(0,len(findings)-MAX_FINDINGS)
+        if extra:
+            lines.append(f'+ {extra} weitere ' + ('Änderung' if extra == 1 else 'Änderungen') + ' in der Auswertung.')
     if run['status'] in ('failed','partial'):
-        lines.extend(['Prüfung fehlgeschlagen' if run['status']=='failed' else 'Prüfung unvollständig',compact(run.get('error') or 'Nicht alle Quellen konnten geprüft werden.',700)])
-    if changes:
-        lines.append(str(len(changes))+' Änderung'+('en' if len(changes)!=1 else ''))
-        findings = []
-        for row,evidence in changes[:5]:
-            assessment=evidence.get('ai_assessment') or {}
-            filename=compact(unquote(urlsplit(row['url']).path.rsplit('/',1)[-1]),110) if 'Datei' in row['kind'] or 'Dokument' in row['kind'] else ''
-            findings.append('• '+(filename+' · ' if filename else '')+compact(assessment.get('summary') or assessment.get('reason') or evidence.get('note') or row['kind'],230))
-        if len(changes)>5:findings.append('Weitere Änderungen in der Auswertung.')
-        lines.append('\n'.join(findings))
-    if run.get('summary') and (changes or run['status'] == 'partial'):
-        blocks = telegram_message.report_blocks(run['summary'])
-        preview = telegram_message.preview(redact('\n\n'.join(blocks)), 2200 if changes else 1200)
-        if preview:
-            lines.extend(['KI-Auswertung', preview])
+        lines.append('Prüfung fehlgeschlagen' if run['status']=='failed' else 'Prüfung unvollständig')
     return telegram_message.compose(lines, project['url'], report_url(run))
 
 
@@ -84,6 +126,9 @@ def queue_run(rid):
     project=store.one('SELECT * FROM projects WHERE id=?',(run['project_id'],))
     if not project or not enabled(project):return
     changes=relevant_changes(rid)
+    if run['status']=='success' and article_headlines.enabled(project.get('prompt')):
+        articles=article_headlines.from_changes([row for row,_ in changes])
+        if articles==[]:return
     if not changes and run['status']=='success':return
     stamp=store.now()
     store.execute('''INSERT OR IGNORE INTO notifications(id,run_id,project_id,created,status,due_at,message)

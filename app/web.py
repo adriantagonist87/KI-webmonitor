@@ -12,6 +12,7 @@ import shutil
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
+from datetime import timedelta
 from urllib.parse import urlsplit, urlencode, quote
 import httpx
 from fastapi import FastAPI, Request, HTTPException
@@ -175,6 +176,9 @@ NOTICES.update(history_cleaned='Prüfverlauf bereinigt.',
                history_files_pending='Prüfverlauf bereinigt. Verbliebene Dateien können über eine neue Vorschau erneut bereinigt werden.')
 NOTICES.update(telegram_saved='Telegram-Einstellungen gespeichert.')
 NOTICES.update(report_schedule_saved='Zeitplan und Zeitraum der E-Mail-Berichte gespeichert.')
+NOTICES.update(report_send_queued='Verteilerbericht erstellt. Den Status pro Empfänger siehst du in der Versandübersicht.')
+NOTICES.update(all_runs_queued='Projektprüfungen wurden in die Warteschlange gestellt.',
+               no_runs_to_queue='Aktuell sind keine weiteren Projekte zur Prüfung einzuplanen.')
 
 def diff_markup(text):
     result = []
@@ -516,6 +520,7 @@ def run_evidence(rid):
 def finding_entries(changes, finished=None):
     """Present exactly the findings that drive attention, without another model."""
     entries=[]
+    titles_by_run={}
     for change in changes:
         if change.get('priority')!='attention' or (change.get('previous_id') is None
                 and change.get('kind') in ('Neue Seite','Neues Dokument')):
@@ -525,6 +530,7 @@ def finding_entries(changes, finished=None):
         reason=assessment.get('reason') if isinstance(assessment,dict) else None
         if not isinstance(reason,str) or not reason.strip():
             reason='Ein archivierter Unterschied ist noch offen. Eine fachliche Einordnung liegt nicht vor.'
+        details=email_reports.specific_details(change,evidence,titles_by_run,catalog_limit=None)
         url=change.get('url','');href=''
         try:
             parsed=urlsplit(url)
@@ -532,7 +538,7 @@ def finding_entries(changes, finished=None):
                     and not any(ord(character)<32 for character in url)):
                 href=url
         except (TypeError,ValueError):pass
-        entries.append({'id':change['id'],'reason':reason,'url':url,'href':href,
+        entries.append({'id':change['id'],'reason':reason,'details':details or [reason],'url':url,'href':href,
                         'time':change.get('finished') or finished or change.get('detected'),
                         'run_id':change['run_id']})
     return entries
@@ -611,6 +617,15 @@ async def project_retry_status():
         if p['status'] not in ('running','queued') and site_safety.latest_protection(p['id']):
             p['status'] = 'protection'
     return {'server_now': now(), 'projects': projects}
+
+@app.post('/projects/run-all')
+async def run_all_projects(request: Request):
+    if (await request.form()).getlist('confirmed') != ['1']:
+        raise HTTPException(400, 'Bitte die Sammelprüfung zuerst bestätigen.')
+    count = enqueue_all()
+    if count is None:
+        raise HTTPException(409, 'Zuerst den manuellen Modus beenden')
+    return redirect('/', 'all_runs_queued' if count else 'no_runs_to_queue')
 
 def known_tags():
     return tag_registry.all_tags()
@@ -799,6 +814,7 @@ async def detail(pid: str, request: Request):
     runs=project_history(pid)
     latest=next((r for r in runs if r.get('finished') and r['status']!='cancelled'),None)
     evidence=run_evidence(latest['id']) if latest else {}
+    p['coverage_gaps']=email_reports.days_without_success(runs,datetime.now(TZ).date()-timedelta(days=6))
     return render(request,'project',project=p,runs=runs,latest=latest,coverage=evidence.get('coverage',{}))
 
 @app.post('/projects/{pid}/review')
@@ -845,6 +861,8 @@ async def run_detail(rid: str, request: Request):
         c['previous'] = one('SELECT * FROM snapshots WHERE id=?', (c['previous_id'],)) if c['previous_id'] else None
         c['current'] = one('SELECT * FROM snapshots WHERE id=?', (c['current_id'],))
     evidence=run_evidence(rid)
+    for change in changes:
+        change['run_summary']=r['summary']
     findings=finding_entries(changes,r['finished']) if r.get('finished') and r['status'] in ('success','partial') else []
     return render(request, 'run', run=r, snapshots=snapshots, changes=changes, findings=findings, events=rows('SELECT * FROM events WHERE run_id=? ORDER BY id', (rid,)), evidence_available=bool(evidence),coverage=evidence.get('coverage',{}),article_catalog=evidence.get('article_catalog',[]))
 
@@ -1380,8 +1398,7 @@ async def distribution_preview(did: str):
     child=one('SELECT id FROM reports WHERE parent_id=? AND distribution_id=? ORDER BY recipient_email LIMIT 1',(parent,did))
     return redirect('/reports/'+(child['id'] if child else parent))
 
-@app.get('/reports')
-async def reports(request: Request):
+def render_reports(request, *, send_error='', selected_distribution=''):
     scope=request.query_params.get('scope','all');did=request.query_params.get('distribution','')
     regular_only = request.query_params.get('regular') == '1'
     try:page=max(1,int(request.query_params.get('page','1')))
@@ -1389,11 +1406,30 @@ async def reports(request: Request):
     where=['mail_status<>?'];args=[maintenance.PURGED]
     if scope in ('admin','distribution'):where.append('audience=?');args.append(scope)
     if did:where.append('distribution_id=?');args.append(did)
-    if regular_only:where.append("period_key NOT LIKE 'test-%'")
+    if regular_only:where.append("period_key NOT LIKE 'test-%' AND period_key NOT LIKE 'manual-%'")
     clause=' WHERE '+' AND '.join(where) if where else ''
     total=one('SELECT count(*) AS n FROM reports'+clause,args)['n'];page=min(page,max(1,(total+49)//50))
     records=rows('SELECT * FROM reports'+clause+' ORDER BY created DESC,audience,distribution_alias,recipient_email,id DESC LIMIT 50 OFFSET ?',(*args,(page-1)*50))
-    return render(request,'reports',reports=records,report_scope=scope,report_distribution=did,report_regular_only=regular_only,report_page=page,report_pages=max(1,(total+49)//50),report_distributions=distributions.all_lists(True),mail_labels=report_mail.LABELS,report_plan=report_schedule.current())
+    lists=distributions.all_lists(True)
+    return render(request,'reports',reports=records,report_scope=scope,report_distribution=did,report_regular_only=regular_only,report_page=page,report_pages=max(1,(total+49)//50),report_distributions=lists,mail_labels=report_mail.LABELS,report_plan=report_schedule.current(),
+                  report_send_lists=[d for d in lists if not d['deleted_at']],report_send_smtp=settings().get('smtp_enabled',False),
+                  report_send_token=uid(),report_send_error=send_error,report_send_selected=selected_distribution)
+
+@app.get('/reports')
+async def reports(request: Request):
+    return render_reports(request)
+
+@app.post('/reports/send')
+async def report_send(request: Request):
+    form=await request.form()
+    distribution_id=str(form.get('distribution_id',''))
+    try:
+        rid=await engine.make_report(distribution_id=distribution_id,request_id=str(form.get('send_token','')))
+    except ValueError as error:
+        response=render_reports(request,send_error=str(error),selected_distribution=distribution_id)
+        response.status_code=400
+        return response
+    return redirect('/reports/'+rid,notice='report_send_queued')
 
 @app.post('/reports/test')
 async def report_test():

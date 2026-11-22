@@ -34,15 +34,15 @@ Die Projektvorgabe befindet sich beim Bearbeiten unter **Mitteilungen**.
 Automatische Prüfungen und Telegram sind getrennte Schalter: Ein manuell
 geprüftes, sonst pausiertes Projekt kann ebenfalls eine Mitteilung erzeugen.
 
-Nach Abschluss einer Prüfung enthält eine Meldung den Projektnamen, die
-bestätigten Änderungen, die wesentliche KI-Auswertung und die Quelle.
-Fehlgeschlagene oder unvollständige Prüfungen melden zusätzlich ihr technisches
-Problem. Unveränderte Seiten, der erste Ausgangsstand sowie als irrelevant oder
+Nach Abschluss einer Prüfung enthält eine Meldung den Projektnamen, bis zu
+drei kurze Stichpunkte zu bestätigten Änderungen und einen Quellenlink. Bei
+weiteren Änderungen nennt die Meldung die Anzahl. Fehlgeschlagene oder
+unvollständige Prüfungen erscheinen als kurze Statuszeile. Unveränderte Seiten,
+der erste Ausgangsstand sowie als irrelevant oder
 unsicher bewertete Hintergrundänderungen erzeugen allein keine Änderungsmeldung.
 Die Entscheidung entspricht derselben Priorisierung wie im Dashboard.
 
-Eine Nachricht bleibt innerhalb des Telegram-Limits. Lange Auswertungen werden
-gekürzt und verweisen auf die vollständige Auswertung im Webmonitor.
+Den vollständigen Bericht und technische Prüfdetails zeigt der Webmonitor.
 Es werden keine Dokumentdateien, Browserprofile oder Zugangsdaten verschickt.
 Auf dem Handy wird der lokale SSH-Tunnel des Windows-PCs nicht automatisch
 erreichbar; Quellenlinks führen deshalb auf die überwachte Webseite.

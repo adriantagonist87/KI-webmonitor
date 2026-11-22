@@ -296,8 +296,8 @@ def clean(options, fingerprint):
                         'SELECT 1 FROM report_changes WHERE report_id=? LIMIT 1', (rid,)).fetchone()):
                     c.execute('DELETE FROM reports WHERE id=?', (rid,))
                 else:
-                    # Keep the weekly period and change markers, so a cleanup
-                    # cannot trigger a duplicate issue or resend old findings.
+                    # Keep the occurrence and its archive links so cleanup
+                    # cannot trigger another delivery for the same occurrence.
                     c.execute("""UPDATE reports SET mail_status=?,content='',error=NULL,sent_at=NULL,
                                  next_attempt=NULL,attempts=0,selection_snapshot='{}' WHERE id=?""", (PURGED, rid))
             previous = _pending(c)

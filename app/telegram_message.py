@@ -1,10 +1,7 @@
-"""Keep report structure in the outbox and add Telegram formatting at delivery."""
+"""Bound outbox messages and apply Telegram formatting at delivery."""
 import re
 
 import httpx
-from bs4 import BeautifulSoup, Tag
-
-from report_render import render_report
 
 
 SOURCE = '\n\nQuelle: '
@@ -24,42 +21,6 @@ def clip(text, limit, suffix):
     end = 2 * (limit - units(suffix))
     excerpt = text.encode('utf-16-le')[:end].decode('utf-16-le', errors='ignore')
     return excerpt.rstrip() + suffix
-
-
-def report_blocks(value):
-    soup = BeautifulSoup(str(render_report(value)), 'html.parser')
-    for node in soup.select('details,table,pre'):
-        node.decompose()
-    for br in soup.find_all('br'):
-        br.replace_with('\n')
-
-    def clean(node):
-        text = node.get_text() if isinstance(node, Tag) else str(node)
-        return '\n'.join(line for row in text.splitlines() if (line := ' '.join(row.split())))
-
-    section = []
-    for node in soup.children:
-        if node.name in ('ul', 'ol'):
-            if section:
-                yield '\n'.join(section)
-                section = []
-            for item in node.find_all('li', recursive=False):
-                if text := clean(item):
-                    yield '• ' + text
-            continue
-        text = clean(node)
-        if not text:
-            continue
-        if node.name in ('h1', 'h2', 'h3', 'h4', 'h5', 'h6'):
-            if section:
-                yield '\n'.join(section)
-            section = [ENTRY + text.replace('\n', ' ')]
-        elif section:
-            section.append(text)
-        else:
-            yield text
-    if section:
-        yield '\n'.join(section)
 
 
 def preview(text, limit):

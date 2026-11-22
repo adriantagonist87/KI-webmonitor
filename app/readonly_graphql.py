@@ -21,7 +21,7 @@ from graphql.language.ast import (
 # Extend only after the corresponding catalog query was actually observed.
 CATALOG_ROOT_FIELDS = {
     'urls', 'heroSlides', 'user', 'collections', 'basket', 'categories', 'branches',
-    'publications', 'recentPublicationsFireprotection', 'recentPublicationsSecurity', 'publication',
+    'publications', 'publicationsByCategory', 'recentPublicationsFireprotection', 'recentPublicationsSecurity', 'publication',
 }
 MAX_BODY_BYTES = 256 * 1024
 MAX_AST_TOKENS = 5000
@@ -81,7 +81,7 @@ def _sane_variables(variables):
     return True
 
 
-def _readonly_document(query, operation_name=None):
+def _readonly_document(query, operation_name=None, *, root_field=None):
     """Resolve root fragments; aliases never grant permission to a field."""
     if not isinstance(query, str) or not query.strip():
         return False
@@ -108,6 +108,7 @@ def _readonly_document(query, operation_name=None):
                 return False
         remaining = [MAX_EXPANDED_SELECTIONS]
         used_fragments = set()
+        roots = set()
 
         def walk(selection_set, root, trail=(), depth=0):
             if depth > MAX_DEPTH:
@@ -117,8 +118,15 @@ def _readonly_document(query, operation_name=None):
                 if remaining[0] < 0:
                     return False
                 if isinstance(selection, FieldNode):
-                    if root and selection.name.value not in CATALOG_ROOT_FIELDS:
-                        return False
+                    if root:
+                        field = selection.name.value
+                        # Observed in the storefront bootstrap, alongside the
+                        # other public shop context fields.
+                        if field not in CATALOG_ROOT_FIELDS and not (
+                            operation_name == 'getContext' and field == 'promoCampaigns'
+                        ):
+                            return False
+                        roots.add(field)
                     if selection.selection_set is not None:
                         if not walk(selection.selection_set, False, trail, depth + 1):
                             return False
@@ -137,13 +145,14 @@ def _readonly_document(query, operation_name=None):
             return True
 
         return (walk(operation.selection_set, True)
-                and used_fragments == set(fragments))
+                and used_fragments == set(fragments)
+                and (root_field is None or root_field in roots))
     except Exception:
         # Parser messages may contain source snippets; never return or log them.
         return False
 
 
-def _readonly_payload(raw):
+def _readonly_payload(raw, *, root_field=None):
     if not isinstance(raw, bytes) or not raw or len(raw) > MAX_BODY_BYTES:
         return False
     try:
@@ -158,7 +167,7 @@ def _readonly_payload(raw):
             return False
         if not _sane_variables(payload.get('variables', {})):
             return False
-        return _readonly_document(payload.get('query'), payload.get('operationName'))
+        return _readonly_document(payload.get('query'), payload.get('operationName'), root_field=root_field)
     except Exception:
         return False
 
@@ -184,4 +193,10 @@ async def permits_readonly_graphql(request, page, project_url):
         return False
 
 
-__all__ = ['CATALOG_ROOT_FIELDS', 'permits_readonly_graphql']
+def is_vds_category_read(request):
+    return (request.url == 'https://shop.vds.de/graphql'
+            and request.method == 'POST'
+            and _readonly_payload(request.post_data_buffer, root_field='publicationsByCategory'))
+
+
+__all__ = ['CATALOG_ROOT_FIELDS', 'is_vds_category_read', 'permits_readonly_graphql']
