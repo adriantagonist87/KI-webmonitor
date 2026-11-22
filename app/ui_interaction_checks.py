@@ -17,7 +17,7 @@ from urllib.parse import urlsplit, parse_qs
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from playwright.async_api import async_playwright, expect
-from web import breadcrumb_path
+from web import breadcrumb_path, env as app_templates
 
 ROOT = Path(__file__).parent
 ORIGIN = 'https://ui.test'
@@ -49,6 +49,8 @@ class FrontendInteractions(unittest.IsolatedAsyncioTestCase):
             reduced_motion='no-preference')
         self.env = Environment(loader=FileSystemLoader(ROOT / 'templates'),
                                autoescape=select_autoescape(['html']))
+        self.env.filters.update(app_templates.filters)
+        self.env.globals.update(app_templates.globals)
         self.env.filters.update({
             'markdown': lambda value: value,
             'status_label': lambda value: {'success': 'Erfolgreich'}.get(value, value or 'Ungeprüft'),

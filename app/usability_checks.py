@@ -340,7 +340,7 @@ class UsabilityBrowser(Fixture, unittest.IsolatedAsyncioTestCase):
         await self.page.set_viewport_size({'width':390,'height':844})
         self.assertTrue(await self.page.locator('.report-table-wrap').evaluate('e => e.scrollWidth > e.clientWidth'))
         self.assertTrue(await self.page.evaluate('document.documentElement.scrollWidth === document.documentElement.clientWidth'))
-        await self.page.get_by_label('Nur reguläre Berichte').check()
+        await self.page.get_by_label('Nur geplante Berichte').check()
         await self.page.get_by_role('button', name='Filtern', exact=True).click()
         await self.page.wait_for_url(ORIGIN + '/reports?*regular=1')
         self.assertEqual(await table.locator('.report-name').count(), 1)
